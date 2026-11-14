@@ -42,7 +42,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ stats, onStart }) =>
     onStartRef.current = onStart;
   }, [onStart]);
 
-  const skinPreset = FISH_SKINS[stats.skin] || FISH_SKINS.royal_blue;
+  const skinPreset = FISH_SKINS[stats.skin] || FISH_SKINS.tropical_paradise;
 
   const triggerStart = () => {
     if (isLeavingRef.current) return;

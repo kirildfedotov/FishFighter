@@ -3,9 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { FishStats, FishSkin, AquariumTheme, FoodItem, DonationTier } from '../types';
+import { FishStats, FishSkin, FishColorPalette, AquariumTheme, FoodItem, DonationTier } from '../types';
 
 export const FISH_SKINS: Record<string, FishSkin> = {
+  tropical_paradise: {
+    id: 'tropical_paradise',
+    name: 'Тропический Риф',
+    jpName: 'トロピカル・パラダイス',
+    description: 'Экзотический тропический окрас: бирюзовая лагуна, коралловый закат, фуксия и золотые блики.',
+    primaryColor: '#06b6d4',
+    secondaryColor: '#f97316',
+    bellyColor: '#fde047',
+    fresnelColor: '#ec4899',
+    priceCoins: 0,
+    pricePearls: 0,
+  },
   royal_blue: {
     id: 'royal_blue',
     name: 'Королевский Синий',
@@ -251,12 +263,12 @@ export const INITIAL_FISH_STATS: FishStats = {
   energy: 90,
   health: 100,
   isSleeping: false,
-  skin: 'royal_blue',
+  skin: 'tropical_paradise',
   theme: 'tokyo_neon_96',
   coins: 150,
   pearls: 10,
   isVip: false,
-  unlockedSkins: ['royal_blue'],
+  unlockedSkins: ['tropical_paradise', 'royal_blue'],
   unlockedThemes: ['tokyo_neon_96'],
   unlockedAccessories: [],
   totalFeedings: 0,
@@ -293,9 +305,16 @@ export function loadFishStats(): FishStats {
     const updatedHappy = Math.max(25, parsed.happiness - happyDrop);
     const updatedHealth = Math.round((updatedHunger + updatedClean + updatedHappy) / 3);
 
+    const prevUnlocked: FishColorPalette[] = Array.isArray(parsed.unlockedSkins) ? parsed.unlockedSkins : ['royal_blue'];
+    const hasTropical = prevUnlocked.includes('tropical_paradise');
+    const updatedUnlocked: FishColorPalette[] = hasTropical ? prevUnlocked : ['tropical_paradise', ...prevUnlocked];
+    const updatedSkin: FishColorPalette = hasTropical ? (parsed.skin || 'tropical_paradise') : 'tropical_paradise';
+
     return {
       ...INITIAL_FISH_STATS,
       ...parsed,
+      skin: updatedSkin,
+      unlockedSkins: updatedUnlocked,
       ageDays: totalAgeDays,
       hunger: updatedHunger,
       cleanliness: updatedClean,

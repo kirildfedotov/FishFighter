@@ -74,8 +74,18 @@ export class AquariumScene {
   private planktonData: { x: number; y: number; z: number; vx: number; vy: number; vz: number }[] = [];
   private planktonCount = 65;
 
-  // Volumetric God Rays
+  // Volumetric God Rays & Theme Animation Props
   private godRaysGroup: THREE.Group = new THREE.Group();
+  private godRayMaterial!: THREE.MeshBasicMaterial;
+  private themeAnimatedNodes: {
+    obj: THREE.Object3D;
+    kind: 'spin' | 'spinY' | 'bob' | 'petal';
+    baseY: number;
+    baseX: number;
+    baseZ: number;
+    phase: number;
+    speed: number;
+  }[] = [];
 
   // Falling Food & Decorations & Ripples
   private foodPellets: FoodPellet[] = [];
@@ -96,9 +106,9 @@ export class AquariumScene {
   // Interactivity & Resize
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
-  private cameraTarget = new THREE.Vector3(0, 0.08, 0);
-  private cameraBasePos = new THREE.Vector3(0, 0.25, 5.1);
-  private currentCameraPos = new THREE.Vector3(0, 0.25, 5.1);
+  private cameraTarget = new THREE.Vector3(0, 0.12, 0);
+  private cameraBasePos = new THREE.Vector3(0, 0.28, 5.25);
+  private currentCameraPos = new THREE.Vector3(0, 0.28, 5.25);
   private resizeObserver: ResizeObserver | null = null;
   private onPointerDownBound!: (e: PointerEvent) => void;
   private onResizeBound!: () => void;
@@ -212,16 +222,16 @@ export class AquariumScene {
   }
 
   private adjustCameraForAspect(aspect: number) {
-    // Pull camera slightly back on narrow portrait mobile screens so the full fish fits gracefully
-    const targetZ = aspect < 0.85 ? 6.4 : aspect < 1.1 ? 5.6 : 5.0;
+    // Pull camera back on narrow portrait mobile screens so both grand scenery and fish shine
+    const targetZ = aspect < 0.85 ? 6.6 : aspect < 1.1 ? 5.8 : 5.2;
     this.currentCameraPos.z = targetZ;
   }
 
   private initFish(skinId: FishColorPalette) {
     this.fish = new BettaFish(skinId, this.isSoftwareGl);
-    this.fish.group.position.set(0, 0.15, 0);
-    this.fish.currentPosition.set(0, 0.15, 0);
-    this.fish.targetPosition.set(0.2, 0.15, 0.1);
+    this.fish.group.position.set(0, 0.18, 0.2);
+    this.fish.currentPosition.set(0, 0.18, 0.2);
+    this.fish.targetPosition.set(0.25, 0.2, 0.25);
     this.scene.add(this.fish.group);
   }
 
@@ -234,21 +244,21 @@ export class AquariumScene {
     this.causticTexture = new THREE.CanvasTexture(this.causticCanvas);
     this.causticTexture.wrapS = THREE.RepeatWrapping;
     this.causticTexture.wrapT = THREE.RepeatWrapping;
-    this.causticTexture.repeat.set(3, 2);
+    this.causticTexture.repeat.set(4, 3);
 
-    const causticGeom = new THREE.PlaneGeometry(8.5, 6);
+    const causticGeom = new THREE.PlaneGeometry(14, 10);
     causticGeom.rotateX(-Math.PI / 2);
 
     const causticMat = new THREE.MeshBasicMaterial({
       map: this.causticTexture,
       transparent: true,
-      opacity: 0.34,
+      opacity: 0.32,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
 
     this.causticPlane = new THREE.Mesh(causticGeom, causticMat);
-    this.causticPlane.position.y = this.tankBounds.minY + 0.12;
+    this.causticPlane.position.y = this.tankBounds.minY + 0.14;
     this.scene.add(this.causticPlane);
   }
 
@@ -292,12 +302,19 @@ export class AquariumScene {
     sCtx.fillStyle = sandColor;
     sCtx.fillRect(0, 0, 512, 512);
 
-    for (let i = 0; i < 5000; i++) {
+    // Multi-scale mineral grain & zen ripple shading
+    for (let y = 0; y < 512; y += 16) {
+      sCtx.fillStyle = y % 32 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.05)';
+      sCtx.fillRect(0, y, 512, 6);
+    }
+
+    for (let i = 0; i < 6500; i++) {
       const x = Math.random() * 512;
       const y = Math.random() * 512;
-      const lum = Math.random() > 0.5 ? 255 : 0;
-      sCtx.fillStyle = `rgba(${lum}, ${lum}, ${lum}, 0.12)`;
-      sCtx.fillRect(x, y, 2, 2);
+      const lum = Math.random() > 0.45 ? 255 : 0;
+      const sz = Math.random() > 0.85 ? 3 : 2;
+      sCtx.fillStyle = `rgba(${lum}, ${lum}, ${lum}, ${Math.random() * 0.14})`;
+      sCtx.fillRect(x, y, sz, sz);
     }
 
     if (!this.sandTexture) {
@@ -305,7 +322,7 @@ export class AquariumScene {
       this.sandTexture.colorSpace = THREE.SRGBColorSpace;
       this.sandTexture.wrapS = THREE.RepeatWrapping;
       this.sandTexture.wrapT = THREE.RepeatWrapping;
-      this.sandTexture.repeat.set(4, 4);
+      this.sandTexture.repeat.set(6, 5);
     } else {
       this.sandTexture.needsUpdate = true;
     }
@@ -316,14 +333,20 @@ export class AquariumScene {
 
     this.paintSandTexture(theme.sandColor);
 
-    const sandGeom = new THREE.PlaneGeometry(8.5, 6.2, 32, 32);
+    // Wide panoramic terraced seabed so no empty void is visible on wide desktops
+    const sandGeom = new THREE.PlaneGeometry(16, 12, 48, 40);
     sandGeom.rotateX(-Math.PI / 2);
     const pos = sandGeom.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const px = pos.getX(i);
       const pz = pos.getZ(i);
-      const wave = Math.sin(px * 1.8 + 0.4) * Math.cos(pz * 1.4) * 0.12 + Math.sin(px * 3.5) * 0.035;
-      pos.setY(i, wave);
+      // Gentle dunes + raised back Aquascape terrace behind z < -1.0 + rocky outer flanks
+      const backSlope = Math.max(0, -pz - 0.8) * 0.24;
+      const sideFlanks = Math.max(0, Math.abs(px) - 2.6) * 0.16;
+      const wave =
+        Math.sin(px * 1.5 + 0.4) * Math.cos(pz * 1.3) * 0.11 +
+        Math.sin(px * 3.2 - pz * 2.1) * 0.035;
+      pos.setY(i, wave + backSlope + sideFlanks);
     }
     sandGeom.computeVertexNormals();
 
@@ -337,21 +360,23 @@ export class AquariumScene {
     this.sandMesh.receiveShadow = true;
     this.scene.add(this.sandMesh);
 
+    this.buildBackCliffSilhouettes();
     this.buildAquaticDriftwood();
     this.buildRiverStones();
+    this.buildAirstoneDiffuser();
     this.buildSunkenCartridge();
     this.buildAquaticFlora();
 
-    // Water Surface
-    const surfGeom = new THREE.PlaneGeometry(8.5, 6, 20, 20);
+    // Expansive Shimmering Water Surface + Subtle Floating Lily Leaves
+    const surfGeom = new THREE.PlaneGeometry(16, 12, 24, 24);
     surfGeom.rotateX(Math.PI / 2);
     const surfMat = new THREE.MeshPhysicalMaterial({
       color: 0x38bdf8,
       transmission: this.isSoftwareGl ? 0 : 0.85,
-      roughness: 0.1,
+      roughness: 0.09,
       metalness: 0.1,
       transparent: true,
-      opacity: this.isSoftwareGl ? 0.35 : 0.45,
+      opacity: this.isSoftwareGl ? 0.35 : 0.46,
       ior: 1.33,
       depthWrite: false,
     });
@@ -359,35 +384,121 @@ export class AquariumScene {
     this.waterSurfaceMesh.position.y = this.tankBounds.maxY;
     this.scene.add(this.waterSurfaceMesh);
 
+    // Floating surface lily pads at top flanks for natural depth
+    const padMat = new THREE.MeshStandardMaterial({
+      color: 0x15803d,
+      roughness: 0.4,
+      side: THREE.DoubleSide,
+    });
+    const lilySpots = [
+      { x: -2.4, z: -0.6, r: 0.24 },
+      { x: -2.05, z: -0.35, r: 0.16 },
+      { x: 2.35, z: -0.75, r: 0.26 },
+      { x: 1.95, z: -0.95, r: 0.18 },
+    ];
+    lilySpots.forEach((p, idx) => {
+      const padGeom = new THREE.CircleGeometry(p.r, 14, 0.25, Math.PI * 1.85);
+      padGeom.rotateX(-Math.PI / 2);
+      const pad = new THREE.Mesh(padGeom, padMat);
+      pad.position.set(p.x, this.tankBounds.maxY - 0.04, p.z);
+      pad.rotation.y = idx * 1.3;
+      this.scene.add(pad);
+    });
+
     this.buildThemeDecorations(themeId);
+    this.applyAtmosphere();
+  }
+
+  private buildBackCliffSilhouettes() {
+    // Distant rock ridges along the rear horizon so the tank feels vast & deep
+    const cliffMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.92,
+      metalness: 0.05,
+    });
+    const ridgeConfigs = [
+      { x: -4.2, y: 0.5, z: -3.7, rx: 1.8, ry: 2.8, rz: 1.1 },
+      { x: -2.1, y: -0.2, z: -3.9, rx: 1.5, ry: 2.1, rz: 1.0 },
+      { x: 0.0, y: -0.5, z: -4.2, rx: 2.0, ry: 1.8, rz: 1.0 },
+      { x: 2.3, y: -0.1, z: -3.8, rx: 1.6, ry: 2.2, rz: 1.1 },
+      { x: 4.3, y: 0.6, z: -3.6, rx: 1.9, ry: 2.9, rz: 1.1 },
+    ];
+    ridgeConfigs.forEach((rc, i) => {
+      const geom = new THREE.DodecahedronGeometry(1, 1);
+      geom.scale(rc.rx, rc.ry, rc.rz);
+      const mesh = new THREE.Mesh(geom, cliffMat);
+      mesh.position.set(rc.x, this.tankBounds.minY + rc.ry * 0.55 + rc.y, rc.z);
+      mesh.rotation.y = i * 0.7;
+      this.scene.add(mesh);
+    });
   }
 
   private buildAquaticDriftwood() {
     const woodMat = new THREE.MeshStandardMaterial({
       color: 0x3b2416,
-      roughness: 0.86,
+      roughness: 0.84,
       metalness: 0.06,
     });
+    const mossCapMat = new THREE.MeshStandardMaterial({
+      color: 0x166534,
+      roughness: 0.92,
+      metalness: 0.02,
+    });
 
-    const rootCurve1 = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-1.9, this.tankBounds.minY + 0.08, -0.7),
-      new THREE.Vector3(-1.3, this.tankBounds.minY + 0.58, -0.5),
-      new THREE.Vector3(-0.6, this.tankBounds.minY + 0.35, -0.75),
-      new THREE.Vector3(0.05, this.tankBounds.minY + 0.12, -0.85),
+    // Sweeping Dragonwood Bonsai Arch on the left-back
+    const trunkCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-2.6, this.tankBounds.minY + 0.05, -1.1),
+      new THREE.Vector3(-1.85, this.tankBounds.minY + 0.75, -0.85),
+      new THREE.Vector3(-1.15, this.tankBounds.minY + 1.15, -0.95),
+      new THREE.Vector3(-0.35, this.tankBounds.minY + 0.85, -1.25),
     ]);
-    const woodMesh1 = new THREE.Mesh(new THREE.TubeGeometry(rootCurve1, 24, 0.13, 8, false), woodMat);
-    woodMesh1.castShadow = true;
-    woodMesh1.receiveShadow = true;
-    this.scene.add(woodMesh1);
+    const trunkMesh = new THREE.Mesh(new THREE.TubeGeometry(trunkCurve, 28, 0.14, 9, false), woodMat);
+    trunkMesh.castShadow = true;
+    trunkMesh.receiveShadow = true;
+    this.scene.add(trunkMesh);
 
-    const rootCurve2 = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-1.3, this.tankBounds.minY + 0.58, -0.5),
-      new THREE.Vector3(-1.05, this.tankBounds.minY + 1.05, -0.3),
-      new THREE.Vector3(-0.75, this.tankBounds.minY + 1.38, -0.4),
+    const upperBranch = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-1.6, this.tankBounds.minY + 0.88, -0.88),
+      new THREE.Vector3(-1.25, this.tankBounds.minY + 1.58, -0.65),
+      new THREE.Vector3(-0.8, this.tankBounds.minY + 1.98, -0.8),
     ]);
-    const woodMesh2 = new THREE.Mesh(new THREE.TubeGeometry(rootCurve2, 16, 0.075, 8, false), woodMat);
-    woodMesh2.castShadow = true;
-    this.scene.add(woodMesh2);
+    const branchMesh = new THREE.Mesh(new THREE.TubeGeometry(upperBranch, 20, 0.07, 8, false), woodMat);
+    branchMesh.castShadow = true;
+    this.scene.add(branchMesh);
+
+    const lowRoot = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-1.85, this.tankBounds.minY + 0.72, -0.85),
+      new THREE.Vector3(-1.4, this.tankBounds.minY + 0.35, -0.35),
+      new THREE.Vector3(-0.95, this.tankBounds.minY + 0.08, -0.15),
+    ]);
+    const rootMesh = new THREE.Mesh(new THREE.TubeGeometry(lowRoot, 16, 0.065, 8, false), woodMat);
+    rootMesh.castShadow = true;
+    this.scene.add(rootMesh);
+
+    // Secondary driftwood spire on right flank for balanced framing
+    const rightBranch = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(2.85, this.tankBounds.minY + 0.05, -0.95),
+      new THREE.Vector3(2.35, this.tankBounds.minY + 0.85, -0.75),
+      new THREE.Vector3(1.85, this.tankBounds.minY + 1.45, -0.95),
+    ]);
+    const rightWood = new THREE.Mesh(new THREE.TubeGeometry(rightBranch, 20, 0.11, 8, false), woodMat);
+    rightWood.castShadow = true;
+    this.scene.add(rightWood);
+
+    // Lush Java Moss cushions nestled on driftwood forks
+    const mossNodes = [
+      { x: -1.55, y: 0.95, z: -0.82, r: 0.22 },
+      { x: -1.18, y: 1.56, z: -0.66, r: 0.18 },
+      { x: -0.85, y: 1.95, z: -0.8, r: 0.16 },
+      { x: 2.35, y: 0.88, z: -0.75, r: 0.2 },
+    ];
+    mossNodes.forEach((m) => {
+      const tuft = new THREE.Mesh(new THREE.DodecahedronGeometry(m.r, 2), mossCapMat);
+      tuft.scale.set(1.25, 0.72, 1.1);
+      tuft.position.set(m.x, this.tankBounds.minY + m.y, m.z);
+      tuft.castShadow = true;
+      this.scene.add(tuft);
+    });
   }
 
   private buildRiverStones() {
@@ -395,22 +506,34 @@ export class AquariumScene {
       new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.72, metalness: 0.12 }),
       new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.82, metalness: 0.08 }),
       new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.62, metalness: 0.18 }),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.78, metalness: 0.1 }),
     ];
 
     const stoneConfigs = [
-      { x: -1.7, z: -0.25, s: 0.32, rot: 0.4, mat: 0 },
-      { x: -1.4, z: 0.25, s: 0.22, rot: 1.1, mat: 1 },
-      { x: -0.8, z: -0.95, s: 0.38, rot: 0.7, mat: 2 },
-      { x: 0.85, z: -0.55, s: 0.28, rot: 2.1, mat: 0 },
-      { x: 1.25, z: -0.85, s: 0.42, rot: 0.5, mat: 1 },
-      { x: 1.6, z: -0.35, s: 0.2, rot: 1.5, mat: 2 },
+      // Left aquascape boulder cluster
+      { x: -2.85, z: -0.35, s: 0.52, sy: 0.85, rot: 0.4, mat: 3 },
+      { x: -2.25, z: 0.05, s: 0.36, sy: 0.68, rot: 1.1, mat: 0 },
+      { x: -1.75, z: -0.25, s: 0.28, sy: 0.62, rot: 0.8, mat: 2 },
+      { x: -1.45, z: 0.35, s: 0.18, sy: 0.58, rot: 1.9, mat: 1 },
+      // Center-back flagstones
+      { x: -0.7, z: -1.35, s: 0.42, sy: 0.55, rot: 0.3, mat: 2 },
+      { x: 0.1, z: -1.55, s: 0.48, sy: 0.52, rot: 1.4, mat: 1 },
+      // Right aquascape boulder cluster
+      { x: 2.9, z: -0.3, s: 0.55, sy: 0.9, rot: 0.9, mat: 3 },
+      { x: 2.25, z: -0.15, s: 0.38, sy: 0.72, rot: 2.1, mat: 0 },
+      { x: 1.65, z: -0.45, s: 0.26, sy: 0.65, rot: 0.5, mat: 2 },
+      { x: 1.95, z: 0.42, s: 0.2, sy: 0.55, rot: 1.7, mat: 1 },
+      // Small foreground pebbles
+      { x: -0.55, z: 0.85, s: 0.12, sy: 0.5, rot: 0.6, mat: 2 },
+      { x: 0.65, z: 0.9, s: 0.14, sy: 0.48, rot: 1.2, mat: 0 },
+      { x: 0.85, z: 0.78, s: 0.09, sy: 0.5, rot: 2.4, mat: 2 },
     ];
 
     stoneConfigs.forEach((sc) => {
       const stoneGeom = new THREE.DodecahedronGeometry(sc.s, 2);
-      stoneGeom.scale(1.2, 0.72, 1.0);
+      stoneGeom.scale(1.22, sc.sy, 1.0);
       const stone = new THREE.Mesh(stoneGeom, stoneMats[sc.mat]);
-      stone.position.set(sc.x, this.tankBounds.minY + sc.s * 0.58, sc.z);
+      stone.position.set(sc.x, this.tankBounds.minY + sc.s * sc.sy * 0.68, sc.z);
       stone.rotation.y = sc.rot;
       stone.castShadow = true;
       stone.receiveShadow = true;
@@ -418,64 +541,104 @@ export class AquariumScene {
     });
   }
 
+  private buildAirstoneDiffuser() {
+    // Volcanic ceramic airstone diffuser anchored beneath the bubble column
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.88, metalness: 0.12 });
+    const glowCoreMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.8,
+      roughness: 0.3,
+    });
+
+    const diffuser = new THREE.Group();
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.34, 0.28, 9), baseMat);
+    cone.position.y = 0.14;
+    cone.castShadow = true;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.03, 8, 16), glowCoreMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.28;
+
+    diffuser.add(cone, ring);
+    diffuser.position.set(-2.3, this.tankBounds.minY + 0.06, -1.0);
+    this.scene.add(diffuser);
+  }
+
   private buildSunkenCartridge() {
     const cartGroup = new THREE.Group();
-    const cartMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.38, metalness: 0.1 });
-    const labelMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.5 });
-    const pinMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.9, roughness: 0.2 });
+    const cartMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.36, metalness: 0.12 });
+    const darkTrimMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.45 });
+    const labelMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.42 });
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.4 });
+    const pinMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9, roughness: 0.2 });
 
-    const cartBody = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.13, 0.5), cartMat);
+    const cartBody = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.14, 0.56), cartMat);
     cartBody.castShadow = true;
     cartGroup.add(cartBody);
 
-    const label = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.34), labelMat);
-    label.position.set(0, 0.07, 0.02);
+    // Classic horizontal Famicom grip ribs
+    for (let r = 0; r < 3; r++) {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.02, 0.03), darkTrimMat);
+      rib.position.set(0, 0.065, -0.22 + r * 0.05);
+      cartGroup.add(rib);
+    }
+
+    const label = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.02, 0.32), labelMat);
+    label.position.set(0, 0.072, 0.06);
     cartGroup.add(label);
 
-    const pins = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.04, 0.07), pinMat);
-    pins.position.set(0, -0.055, -0.22);
+    const accent = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.024, 0.08), stripeMat);
+    accent.position.set(0, 0.074, 0.12);
+    cartGroup.add(accent);
+
+    const pins = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.04, 0.08), pinMat);
+    pins.position.set(0, -0.055, -0.25);
     cartGroup.add(pins);
 
-    cartGroup.position.set(-1.1, this.tankBounds.minY + 0.1, 0.65);
-    cartGroup.rotation.set(0.18, 0.45, -0.15);
+    cartGroup.position.set(-1.3, this.tankBounds.minY + 0.13, 0.62);
+    cartGroup.rotation.set(0.18, 0.48, -0.16);
     this.scene.add(cartGroup);
   }
 
   private buildAquaticFlora() {
-    const ribbonMat = new THREE.MeshStandardMaterial({
-      color: 0x15803d,
-      roughness: 0.38,
-      metalness: 0.08,
-      side: THREE.DoubleSide,
-    });
+    const ribbonMats = [
+      new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.36, metalness: 0.08, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0x0f766e, roughness: 0.38, metalness: 0.1, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.34, metalness: 0.06, side: THREE.DoubleSide }),
+    ];
 
     const plantClusters = [
-      { x: -2.6, z: -1.1, height: 2.6, leaves: 8 },
-      { x: -2.2, z: -0.5, height: 1.9, leaves: 6 },
-      { x: 2.4, z: -1.0, height: 2.4, leaves: 7 },
-      { x: 2.0, z: -0.4, height: 1.7, leaves: 5 },
-      { x: 1.7, z: -1.4, height: 2.7, leaves: 7 },
+      { x: -3.2, z: -1.1, height: 3.1, leaves: 9, matIdx: 0 },
+      { x: -2.7, z: -0.8, height: 2.7, leaves: 8, matIdx: 1 },
+      { x: -2.2, z: -0.45, height: 2.0, leaves: 6, matIdx: 2 },
+      { x: -1.8, z: -1.45, height: 2.5, leaves: 6, matIdx: 1 },
+      { x: 1.85, z: -1.45, height: 2.8, leaves: 7, matIdx: 1 },
+      { x: 2.5, z: -0.95, height: 2.6, leaves: 8, matIdx: 0 },
+      { x: 2.1, z: -0.35, height: 1.85, leaves: 6, matIdx: 2 },
+      { x: 3.15, z: -1.05, height: 3.2, leaves: 9, matIdx: 0 },
     ];
 
     plantClusters.forEach((cluster) => {
       for (let l = 0; l < cluster.leaves; l++) {
-        const leafH = cluster.height * (0.75 + Math.random() * 0.35);
-        const leafGeom = new THREE.PlaneGeometry(0.11, leafH, 3, 14);
+        const leafH = cluster.height * (0.72 + Math.random() * 0.38);
+        const leafGeom = new THREE.PlaneGeometry(0.125, leafH, 3, 14);
         const lPos = leafGeom.attributes.position;
 
         for (let i = 0; i < lPos.count; i++) {
           const y = lPos.getY(i);
           const ratio = (y + leafH / 2) / leafH;
-          lPos.setZ(i, Math.sin(ratio * Math.PI) * 0.16);
-          lPos.setX(i, lPos.getX(i) + Math.sin(ratio * Math.PI * 1.5) * 0.045);
+          // Taper leaf tip smoothly into natural Vallisneria ribbon
+          const taper = 1 - Math.pow(ratio, 2.2) * 0.72;
+          lPos.setX(i, lPos.getX(i) * taper + Math.sin(ratio * Math.PI * 1.6) * 0.055);
+          lPos.setZ(i, Math.sin(ratio * Math.PI) * 0.18);
         }
         leafGeom.computeVertexNormals();
 
-        const leafMesh = new THREE.Mesh(leafGeom, ribbonMat);
+        const leafMesh = new THREE.Mesh(leafGeom, ribbonMats[cluster.matIdx]);
         leafMesh.position.set(
-          cluster.x + (Math.random() - 0.5) * 0.35,
+          cluster.x + (Math.random() - 0.5) * 0.42,
           this.tankBounds.minY + leafH * 0.48,
-          cluster.z + (Math.random() - 0.5) * 0.35
+          cluster.z + (Math.random() - 0.5) * 0.42
         );
         leafMesh.rotation.y = Math.random() * Math.PI * 2;
         leafMesh.castShadow = true;
@@ -492,67 +655,81 @@ export class AquariumScene {
       metalness: 0.1,
       side: THREE.DoubleSide,
     });
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       const aShape = new THREE.Shape();
       aShape.moveTo(0, 0);
-      aShape.bezierCurveTo(0.12, 0.15, 0.18, 0.35, 0.0, 0.46);
-      aShape.bezierCurveTo(-0.18, 0.35, -0.12, 0.15, 0, 0);
+      aShape.bezierCurveTo(0.14, 0.16, 0.2, 0.38, 0.0, 0.5);
+      aShape.bezierCurveTo(-0.2, 0.38, -0.14, 0.16, 0, 0);
 
       const aGeom = new THREE.ShapeGeometry(aShape, 8);
       const aLeaf = new THREE.Mesh(aGeom, anubiasMat);
-      aLeaf.position.set(-1.15 + (i % 3) * 0.18, this.tankBounds.minY + 0.58 + i * 0.07, -0.4);
+      const isRight = i >= 5;
+      aLeaf.position.set(
+        isRight ? 2.15 + (i % 3) * 0.18 : -1.25 + (i % 3) * 0.18,
+        this.tankBounds.minY + 0.55 + (i % 4) * 0.09,
+        -0.5
+      );
       aLeaf.rotation.set(-0.6, i * 0.8, 0.3);
       aLeaf.castShadow = true;
       this.scene.add(aLeaf);
     }
 
+    // Marimo Moss Balls Trio
     const mossCanvas = document.createElement('canvas');
     mossCanvas.width = 128;
     mossCanvas.height = 128;
     const mCtx = mossCanvas.getContext('2d')!;
     mCtx.fillStyle = '#14532d';
     mCtx.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 600; i++) {
+    for (let i = 0; i < 700; i++) {
       mCtx.fillStyle = Math.random() > 0.5 ? '#166534' : '#15803d';
       mCtx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
     }
     const mossTexture = new THREE.CanvasTexture(mossCanvas);
     mossTexture.colorSpace = THREE.SRGBColorSpace;
 
-    const mossGeom = new THREE.DodecahedronGeometry(0.35, 3);
     const mossMat = new THREE.MeshStandardMaterial({
       map: mossTexture,
       roughness: 0.96,
       metalness: 0.02,
     });
-    const mossBall = new THREE.Mesh(mossGeom, mossMat);
-    mossBall.position.set(-0.25, this.tankBounds.minY + 0.32, 0.32);
-    mossBall.castShadow = true;
-    this.scene.add(mossBall);
+    const marimos = [
+      { x: -0.25, z: 0.35, r: 0.32 },
+      { x: 0.18, z: 0.48, r: 0.2 },
+      { x: 1.5, z: 0.28, r: 0.24 },
+    ];
+    marimos.forEach((m) => {
+      const mossBall = new THREE.Mesh(new THREE.DodecahedronGeometry(m.r, 3), mossMat);
+      mossBall.position.set(m.x, this.tankBounds.minY + m.r * 0.9, m.z);
+      mossBall.castShadow = true;
+      this.scene.add(mossBall);
+    });
   }
 
   private initGodRays() {
-    const rayGeom = new THREE.ConeGeometry(0.85, 4.2, 16, 1, true);
-    rayGeom.translate(0, -2.1, 0);
+    const rayGeom = new THREE.ConeGeometry(1.15, 4.4, 18, 1, true);
+    rayGeom.translate(0, -2.2, 0);
 
-    const rayMat = new THREE.MeshBasicMaterial({
+    this.godRayMaterial = new THREE.MeshBasicMaterial({
       color: 0x93c5fd,
       transparent: true,
-      opacity: 0.06,
+      opacity: 0.065,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
 
-    const ray1 = new THREE.Mesh(rayGeom, rayMat);
-    ray1.position.set(0.6, this.tankBounds.maxY, -0.3);
-    ray1.rotation.set(0.15, 0, -0.22);
-    this.godRaysGroup.add(ray1);
-
-    const ray2 = new THREE.Mesh(rayGeom, rayMat);
-    ray2.position.set(-1.2, this.tankBounds.maxY, -0.6);
-    ray2.rotation.set(-0.1, 0, 0.28);
-    this.godRaysGroup.add(ray2);
+    const rays = [
+      { x: 0.7, z: -0.4, rx: 0.15, rz: -0.22 },
+      { x: -1.35, z: -0.65, rx: -0.1, rz: 0.28 },
+      { x: 2.1, z: -0.9, rx: 0.08, rz: -0.32 },
+    ];
+    rays.forEach((r) => {
+      const ray = new THREE.Mesh(rayGeom, this.godRayMaterial);
+      ray.position.set(r.x, this.tankBounds.maxY, r.z);
+      ray.rotation.set(r.rx, 0, r.rz);
+      this.godRaysGroup.add(ray);
+    });
   }
 
   private initPlankton() {
@@ -607,147 +784,465 @@ export class AquariumScene {
     this.planktonParticles.instanceMatrix.needsUpdate = true;
   }
 
-  public buildThemeDecorations(themeId: AquariumThemeId) {
-    while (this.decorGroup.children.length > 0) {
-      this.decorGroup.remove(this.decorGroup.children[0]);
+  private disposeGroupResources(group: THREE.Group) {
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((m) => {
+          if (m) {
+            const std = m as THREE.MeshStandardMaterial;
+            std.map?.dispose();
+            std.emissiveMap?.dispose();
+            m.dispose();
+          }
+        });
+      }
+    });
+    while (group.children.length > 0) {
+      group.remove(group.children[0]);
     }
+  }
 
-    if (themeId === 'zen_garden') {
-      const toriiMat = new THREE.MeshStandardMaterial({ color: 0xd92626, roughness: 0.3, metalness: 0.15 });
-      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.75, metalness: 0.1 });
-      const goldMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.2, metalness: 0.85 });
+  private makeRetroSignTexture(topText: string, bottomText: string, accentColor: string, bgColor: string): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 192;
+    const ctx = canvas.getContext('2d')!;
 
-      const toriiGroup = new THREE.Group();
-      const baseGeom = new THREE.CylinderGeometry(0.14, 0.17, 0.16, 12);
-      const leftBase = new THREE.Mesh(baseGeom, stoneMat);
-      leftBase.position.set(-0.6, 0.08, 0);
-      const rightBase = new THREE.Mesh(baseGeom, stoneMat);
-      rightBase.position.set(0.6, 0.08, 0);
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, 512, 192);
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 10;
+    ctx.strokeRect(8, 8, 496, 176);
 
-      const pillarGeom = new THREE.CylinderGeometry(0.08, 0.095, 1.65, 16);
-      const leftPillar = new THREE.Mesh(pillarGeom, toriiMat);
-      leftPillar.position.set(-0.6, 0.9, 0);
-      leftPillar.rotation.z = -0.04;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = accentColor;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 54px monospace';
+    ctx.fillText(topText, 256, 72);
 
-      const rightPillar = new THREE.Mesh(pillarGeom, toriiMat);
-      rightPillar.position.set(0.6, 0.9, 0);
-      rightPillar.rotation.z = 0.04;
+    ctx.fillStyle = accentColor;
+    ctx.font = 'bold 34px monospace';
+    ctx.fillText(bottomText, 256, 134);
 
-      const topBeam = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.12, 0.16), toriiMat);
-      topBeam.position.set(0, 1.72, 0);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
 
-      const goldTips = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.06, 0.18), goldMat);
-      goldTips.position.set(0, 1.79, 0);
+  public buildThemeDecorations(themeId: AquariumThemeId) {
+    this.disposeGroupResources(this.decorGroup);
+    this.themeAnimatedNodes = [];
+    const baseY = this.tankBounds.minY;
 
-      const subBeam = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.09, 0.12), toriiMat);
-      subBeam.position.set(0, 1.38, 0);
+    if (themeId === 'tokyo_neon_96') {
+      // GRAND SHINJUKU 1996 CYBER-AQUASCAPE DIORAMA
+      const darkSteelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.42, metalness: 0.72 });
+      const cyanNeon = new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x06b6d4, emissiveIntensity: 1.5, roughness: 0.2 });
+      const pinkNeon = new THREE.MeshStandardMaterial({ color: 0xf472b6, emissive: 0xd946ef, emissiveIntensity: 1.5, roughness: 0.2 });
+      const amberNeon = new THREE.MeshStandardMaterial({ color: 0xfde047, emissive: 0xf59e0b, emissiveIntensity: 1.2, roughness: 0.25 });
 
-      const plaque = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 0.06), goldMat);
-      plaque.position.set(0, 1.55, 0);
+      // Twin Multi-Tiered Cyberpunk Neon Towers + Skybridge Arch
+      [-2.05, 2.05].forEach((tx, idx) => {
+        const tower = new THREE.Group();
+        const isLeft = idx === 0;
+        const primaryNeon = isLeft ? cyanNeon : pinkNeon;
+        const secondaryNeon = isLeft ? pinkNeon : cyanNeon;
 
-      toriiGroup.add(leftBase, rightBase, leftPillar, rightPillar, topBeam, goldTips, subBeam, plaque);
-      toriiGroup.position.set(0.35, this.tankBounds.minY, -1.0);
-      toriiGroup.rotation.y = -0.22;
-      this.decorGroup.add(toriiGroup);
-    } else if (themeId === 'sakura_shrine') {
-      const toroGroup = new THREE.Group();
-      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.85, metalness: 0.1 });
-      const lanternGlowMat = new THREE.MeshStandardMaterial({
-        color: 0xfef08a,
-        emissive: 0xf59e0b,
-        emissiveIntensity: 1.2,
+        const basePlinth = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.35, 0.72), darkSteelMat);
+        basePlinth.position.y = 0.175;
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.64, 2.35, 0.56), darkSteelMat);
+        body.position.y = 1.45;
+        const crown = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.5, 0.42), darkSteelMat);
+        crown.position.y = 2.85;
+        const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.04, 0.7, 8), primaryNeon);
+        spire.position.y = 3.4;
+
+        // Vertical Neon Side Rails
+        const railL = new THREE.Mesh(new THREE.BoxGeometry(0.055, 2.25, 0.06), primaryNeon);
+        railL.position.set(-0.31, 1.45, 0.28);
+        const railR = new THREE.Mesh(new THREE.BoxGeometry(0.055, 2.25, 0.06), secondaryNeon);
+        railR.position.set(0.31, 1.45, 0.28);
+
+        // Glowing Horizon Window Bars
+        for (let w = 0; w < 5; w++) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 0.03), w % 2 === 0 ? primaryNeon : amberNeon);
+          win.position.set(0, 0.65 + w * 0.4, 0.285);
+          tower.add(win);
+        }
+
+        tower.add(basePlinth, body, crown, spire, railL, railR);
+        tower.position.set(tx, baseY + 0.08, -1.45);
+        tower.rotation.y = isLeft ? 0.22 : -0.22;
+        this.decorGroup.add(tower);
       });
 
-      const kiso = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.44, 0.18, 6), stoneMat);
-      kiso.position.set(0, 0.09, 0);
-      const sao = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.75, 12), stoneMat);
-      sao.position.set(0, 0.55, 0);
-      const chudai = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.28, 0.16, 6), stoneMat);
-      chudai.position.set(0, 1.0, 0);
-      const hibukuro = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.35, 6), lanternGlowMat);
-      hibukuro.position.set(0, 1.25, 0);
-      const kasa = new THREE.Mesh(new THREE.ConeGeometry(0.58, 0.32, 6), stoneMat);
-      kasa.position.set(0, 1.58, 0);
-      const hoju = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 12), stoneMat);
-      hoju.position.set(0, 1.82, 0);
+      // Central Overhead Cyber-Torii Skybridge with Glowing Tokyo '96 Kanji Signboard
+      const bridgeGroup = new THREE.Group();
+      const beamTop = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.14, 0.24), darkSteelMat);
+      beamTop.position.set(0, 2.68, 0);
+      const beamGlow = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.05, 0.26), cyanNeon);
+      beamGlow.position.set(0, 2.6, 0);
 
+      const signTex = this.makeRetroSignTexture('東京ネオン', 'FISH FIGHTER 96', '#22d3ee', '#090d26');
+      const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+      const signBoard = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.66, 0.12), [
+        darkSteelMat, darkSteelMat, darkSteelMat, darkSteelMat, signMat, darkSteelMat,
+      ]);
+      signBoard.position.set(0, 2.15, 0.06);
+
+      const signFrame = new THREE.Mesh(new THREE.BoxGeometry(1.83, 0.74, 0.08), pinkNeon);
+      signFrame.position.set(0, 2.15, 0.02);
+
+      // Holographic Rotating Aqua Rings behind center
+      const holoRing1 = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.025, 10, 40), cyanNeon);
+      holoRing1.position.set(0, 1.25, -0.05);
+      const holoRing2 = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.02, 10, 32), pinkNeon);
+      holoRing2.position.set(0, 1.25, -0.05);
+
+      bridgeGroup.add(beamTop, beamGlow, signFrame, signBoard, holoRing1, holoRing2);
+      bridgeGroup.position.set(0, baseY + 0.1, -1.55);
+      this.decorGroup.add(bridgeGroup);
+
+      this.themeAnimatedNodes.push(
+        { obj: holoRing1, kind: 'spin', baseY: 1.25, baseX: 0, baseZ: -0.05, phase: 0, speed: 0.45 },
+        { obj: holoRing2, kind: 'spin', baseY: 1.25, baseX: 0, baseZ: -0.05, phase: 1.6, speed: -0.65 }
+      );
+
+      // Glowing Cyber-Crystal Clusters along Midground
+      const crystalSpots = [
+        { x: -0.95, z: -1.1, mat: cyanNeon, h: 0.55 },
+        { x: 0.85, z: -1.15, mat: pinkNeon, h: 0.62 },
+        { x: 1.35, z: -0.75, mat: cyanNeon, h: 0.42 },
+      ];
+      crystalSpots.forEach((c) => {
+        const cGroup = new THREE.Group();
+        for (let k = 0; k < 3; k++) {
+          const spire = new THREE.Mesh(new THREE.ConeGeometry(0.09, c.h * (0.7 + k * 0.18), 5), c.mat);
+          spire.position.set((k - 1) * 0.1, c.h * 0.4, (k % 2) * 0.08);
+          spire.rotation.set((k - 1) * 0.18, k, (1 - k) * 0.22);
+          cGroup.add(spire);
+        }
+        cGroup.position.set(c.x, baseY + 0.12, c.z);
+        this.decorGroup.add(cGroup);
+      });
+    } else if (themeId === 'zen_garden') {
+      // MONUMENTAL KYOTO ZEN TORII SHRINE + BAMBOO GROVE + TWIN STONE LANTERNS
+      const toriiMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.28, metalness: 0.15 });
+      const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.65 });
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.8, metalness: 0.08 });
+      const goldMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.2, metalness: 0.88 });
+      const bambooMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.42, metalness: 0.06 });
+      const lanternGlowMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xf59e0b, emissiveIntensity: 1.4 });
+
+      // Grand Stone Courtyard Dais
+      const dais = new THREE.Mesh(new THREE.CylinderGeometry(1.65, 1.85, 0.22, 8), stoneMat);
+      dais.position.set(0.15, baseY + 0.11, -1.25);
+      this.decorGroup.add(dais);
+
+      // Monumental Vermilion Torii Gate
+      const toriiGroup = new THREE.Group();
+      [-0.95, 0.95].forEach((px) => {
+        const kamebara = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.23, 0.26, 12), darkWoodMat);
+        kamebara.position.set(px, 0.13, 0);
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 2.3, 16), toriiMat);
+        pillar.position.set(px, 1.35, 0);
+        pillar.rotation.z = px < 0 ? -0.045 : 0.045;
+        toriiGroup.add(kamebara, pillar);
+      });
+
+      const kasagi = new THREE.Mesh(new THREE.BoxGeometry(2.85, 0.17, 0.26), darkWoodMat);
+      kasagi.position.set(0, 2.52, 0);
+      const kasagiGold = new THREE.Mesh(new THREE.BoxGeometry(2.96, 0.07, 0.28), goldMat);
+      kasagiGold.position.set(0, 2.61, 0);
+      const shimaki = new THREE.Mesh(new THREE.BoxGeometry(2.65, 0.12, 0.21), toriiMat);
+      shimaki.position.set(0, 2.38, 0);
+      const nuki = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.13, 0.15), toriiMat);
+      nuki.position.set(0, 1.96, 0);
+      const gakuzuka = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.36, 0.1), goldMat);
+      gakuzuka.position.set(0, 2.18, 0.04);
+
+      toriiGroup.add(kasagi, kasagiGold, shimaki, nuki, gakuzuka);
+      toriiGroup.position.set(0.15, baseY + 0.2, -1.28);
+      toriiGroup.rotation.y = -0.1;
+      this.decorGroup.add(toriiGroup);
+
+      // Twin Glowing Stone Lanterns Flanking the Shrine
+      [-1.75, 2.0].forEach((lx, idx) => {
+        const lGroup = new THREE.Group();
+        const kiso = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.14, 6), stoneMat);
+        kiso.position.y = 0.07;
+        const sao = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.58, 10), stoneMat);
+        sao.position.y = 0.43;
+        const hibukuro = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.26, 6), lanternGlowMat);
+        hibukuro.position.y = 0.85;
+        const kasa = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.24, 6), stoneMat);
+        kasa.position.y = 1.09;
+        lGroup.add(kiso, sao, hibukuro, kasa);
+        lGroup.position.set(lx, baseY + 0.12, idx === 0 ? -0.95 : -1.1);
+        this.decorGroup.add(lGroup);
+      });
+
+      // Segmented Lush Bamboo Forest on Flanks
+      [-2.75, -2.48, -2.25, 2.55, 2.8, 3.05].forEach((bx, i) => {
+        const h = 2.6 + (i % 3) * 0.55;
+        const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.068, h, 8), bambooMat);
+        stalk.position.set(bx, baseY + h * 0.5, -1.4 + (i % 2) * 0.3);
+        stalk.rotation.z = (i % 2 === 0 ? 1 : -1) * 0.04;
+        this.decorGroup.add(stalk);
+      });
+
+      // Balanced Zen Cairn Stone Stack
+      const cairnGroup = new THREE.Group();
+      [0.24, 0.18, 0.13, 0.09].reduce((accY, r) => {
+        const rock = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), stoneMat);
+        rock.scale.set(1.3, 0.52, 1.15);
+        rock.position.y = accY + r * 0.45;
+        cairnGroup.add(rock);
+        return accY + r * 0.92;
+      }, 0);
+      cairnGroup.position.set(1.25, baseY + 0.12, -0.75);
+      this.decorGroup.add(cairnGroup);
+    } else if (themeId === 'sakura_shrine') {
+      // ANCIENT BLOSSOMING SAKURA TREE + ARCHED DRUM BRIDGE + STONE TORO LANTERN + DRIFTING PETALS
+      const barkMat = new THREE.MeshStandardMaterial({ color: 0x3f231c, roughness: 0.86 });
+      const blossomMat1 = new THREE.MeshStandardMaterial({ color: 0xfbcfe8, emissive: 0xf472b6, emissiveIntensity: 0.25, roughness: 0.45 });
+      const blossomMat2 = new THREE.MeshStandardMaterial({ color: 0xf9a8d4, emissive: 0xdb2777, emissiveIntensity: 0.2, roughness: 0.45 });
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.85, metalness: 0.1 });
+      const bridgeRedMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.35 });
+      const lanternGlowMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xf59e0b, emissiveIntensity: 1.4 });
+
+      // Grand Gnarled Sakura Tree Sweeping Over the Aquarium
+      const trunkCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-2.35, baseY + 0.05, -1.2),
+        new THREE.Vector3(-1.95, baseY + 1.25, -1.15),
+        new THREE.Vector3(-1.15, baseY + 2.25, -1.05),
+        new THREE.Vector3(-0.15, baseY + 2.65, -0.95),
+      ]);
+      const sakuraTrunk = new THREE.Mesh(new THREE.TubeGeometry(trunkCurve, 26, 0.18, 9, false), barkMat);
+      this.decorGroup.add(sakuraTrunk);
+
+      const canopyBough = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-1.65, baseY + 1.75, -1.12),
+        new THREE.Vector3(-1.0, baseY + 2.55, -0.85),
+        new THREE.Vector3(-0.35, baseY + 2.95, -0.9),
+      ]);
+      this.decorGroup.add(new THREE.Mesh(new THREE.TubeGeometry(canopyBough, 18, 0.1, 8, false), barkMat));
+
+      // Layered Blooming Sakura Canopy Clouds
+      const canopyClouds = [
+        { x: -1.65, y: 2.35, z: -1.05, r: 0.56 },
+        { x: -1.1, y: 2.75, z: -0.95, r: 0.68 },
+        { x: -0.45, y: 2.9, z: -0.92, r: 0.64 },
+        { x: 0.22, y: 2.65, z: -0.98, r: 0.52 },
+        { x: 2.25, y: 2.1, z: -1.25, r: 0.48 },
+      ];
+      canopyClouds.forEach((c, idx) => {
+        const cloud = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(c.r, 2),
+          idx % 2 === 0 ? blossomMat1 : blossomMat2
+        );
+        cloud.scale.set(1.35, 0.72, 1.05);
+        cloud.position.set(c.x, baseY + c.y, c.z);
+        this.decorGroup.add(cloud);
+      });
+
+      // Vermilion Arched Drum Bridge (Taiko-Bashi) across the Shrine Courtyard
+      const bridgeArch = new THREE.Mesh(
+        new THREE.TorusGeometry(0.95, 0.09, 10, 24, Math.PI * 0.72),
+        bridgeRedMat
+      );
+      bridgeArch.rotation.z = Math.PI * 0.14;
+      bridgeArch.position.set(0.35, baseY - 0.18, -1.15);
+      this.decorGroup.add(bridgeArch);
+
+      // Tall Ceremonial Toro Lantern on the Right
+      const toroGroup = new THREE.Group();
+      const kiso = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.2, 6), stoneMat);
+      kiso.position.y = 0.1;
+      const sao = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.95, 12), stoneMat);
+      sao.position.y = 0.68;
+      const chudai = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.3, 0.18, 6), stoneMat);
+      chudai.position.y = 1.24;
+      const hibukuro = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.4, 6), lanternGlowMat);
+      hibukuro.position.y = 1.53;
+      const kasa = new THREE.Mesh(new THREE.ConeGeometry(0.64, 0.38, 6), stoneMat);
+      kasa.position.y = 1.91;
+      const hoju = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 12), stoneMat);
+      hoju.position.y = 2.18;
       toroGroup.add(kiso, sao, chudai, hibukuro, kasa, hoju);
-      toroGroup.position.set(0.4, this.tankBounds.minY, -0.9);
-      toroGroup.rotation.y = 0.35;
+      toroGroup.position.set(1.65, baseY + 0.12, -1.05);
+      toroGroup.rotation.y = -0.35;
       this.decorGroup.add(toroGroup);
 
-      // Gentle sakura blossoms floating around shrine
-      const petalMat = new THREE.MeshStandardMaterial({ color: 0xfbcfe8, roughness: 0.4, side: THREE.DoubleSide });
-      const petalGeom = new THREE.CircleGeometry(0.06, 5);
-      for (let i = 0; i < 14; i++) {
+      // Gently Spiraling & Drifting Sakura Petals throughout the water
+      const petalMat = new THREE.MeshStandardMaterial({ color: 0xfbcfe8, roughness: 0.35, side: THREE.DoubleSide });
+      const petalGeom = new THREE.CircleGeometry(0.065, 5);
+      for (let i = 0; i < 28; i++) {
         const petal = new THREE.Mesh(petalGeom, petalMat);
-        petal.position.set(
-          THREE.MathUtils.randFloat(-1.8, 1.8),
-          this.tankBounds.minY + 0.08 + Math.random() * 0.2,
-          THREE.MathUtils.randFloat(-1.2, 0.8)
-        );
-        petal.rotation.set(-Math.PI / 2 + (Math.random() - 0.5) * 0.4, Math.random() * Math.PI, 0);
+        const px = THREE.MathUtils.randFloat(-2.6, 2.6);
+        const py = THREE.MathUtils.randFloat(baseY + 0.2, this.tankBounds.maxY - 0.15);
+        const pz = THREE.MathUtils.randFloat(-1.2, 0.9);
+        petal.position.set(px, py, pz);
+        petal.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
         this.decorGroup.add(petal);
+        this.themeAnimatedNodes.push({
+          obj: petal,
+          kind: 'petal',
+          baseX: px,
+          baseY: py,
+          baseZ: pz,
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.22 + Math.random() * 0.25,
+        });
       }
     } else if (themeId === 'golden_palace') {
-      const chestGroup = new THREE.Group();
-      const woodMat = new THREE.MeshStandardMaterial({ color: 0x3d2314, roughness: 0.8 });
+      // IMPERIAL SHOGUN GOLDEN PAGODA + TREASURE VAULT + GIANT PEARL SHELL + SPINNING GOLD COINS
       const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.16, metalness: 0.95 });
-      const ironMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.5, metalness: 0.85 });
+      const crimsonLacquer = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.25, metalness: 0.2 });
+      const woodMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.72 });
+      const pearlMat = new THREE.MeshPhysicalMaterial({ color: 0xfff1f2, emissive: 0xfef08a, emissiveIntensity: 0.35, roughness: 0.08, iridescence: 1.0 });
 
-      const base = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.55, 0.65), woodMat);
-      base.position.set(0, 0.28, 0);
-      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 1.0, 14, 1, false, 0, Math.PI), woodMat);
-      lid.rotation.z = Math.PI / 2;
-      lid.position.set(0, 0.55, 0);
+      // Grand 3-Tiered Shogun Pagoda Centerpiece
+      const pagoda = new THREE.Group();
+      const podium = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.28, 1.35), crimsonLacquer);
+      podium.position.y = 0.14;
+      pagoda.add(podium);
 
-      const band1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.56, 0.67), ironMat);
-      band1.position.set(-0.35, 0.28, 0);
-      const band2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.56, 0.67), ironMat);
-      band2.position.set(0.35, 0.28, 0);
-
-      const lock = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.05), goldMat);
-      lock.position.set(0, 0.38, 0.34);
-
-      const treasure = new THREE.Mesh(new THREE.DodecahedronGeometry(0.28, 2), goldMat);
-      treasure.position.set(0.35, 0.2, 0.35);
-
-      chestGroup.add(base, lid, band1, band2, lock, treasure);
-      chestGroup.position.set(0.4, this.tankBounds.minY, -0.85);
-      chestGroup.rotation.y = 0.35;
-      this.decorGroup.add(chestGroup);
-    } else if (themeId === 'dendy_castle') {
-      const brickMat = new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.9 });
-      const roofMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.6 });
-
-      const tower = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.5, 0.85), brickMat);
-      tower.position.set(0, 0.75, 0);
-
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(0.7, 0.85, 4), roofMat);
-      roof.rotateY(Math.PI / 4);
-      roof.position.set(0, 1.9, 0);
-
-      const batGeom = new THREE.BoxGeometry(0.18, 0.22, 0.18);
-      for (let i = 0; i < 4; i++) {
-        const bat = new THREE.Mesh(batGeom, brickMat);
-        bat.position.set(i % 2 === 0 ? -0.38 : 0.38, 1.55, i < 2 ? -0.38 : 0.38);
-        tower.add(bat);
+      for (let tier = 0; tier < 3; tier++) {
+        const scale = 1 - tier * 0.24;
+        const yOff = 0.28 + tier * 0.72;
+        const hall = new THREE.Mesh(new THREE.BoxGeometry(1.35 * scale, 0.5, 0.9 * scale), crimsonLacquer);
+        hall.position.y = yOff + 0.25;
+        const eave = new THREE.Mesh(new THREE.ConeGeometry(1.22 * scale, 0.34 * scale, 4), goldMat);
+        eave.rotation.y = Math.PI / 4;
+        eave.position.y = yOff + 0.62;
+        pagoda.add(hall, eave);
       }
+      const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.07, 0.55, 8), goldMat);
+      spire.position.y = 2.65;
+      pagoda.add(spire);
+
+      // Rotating Imperial Solar Halo Behind Pagoda
+      const halo = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.035, 10, 48), goldMat);
+      halo.position.set(0, 1.55, -0.35);
+      pagoda.add(halo);
+      this.themeAnimatedNodes.push({ obj: halo, kind: 'spin', baseX: 0, baseY: 1.55, baseZ: -0.35, phase: 0, speed: 0.35 });
+
+      pagoda.position.set(0.1, baseY + 0.08, -1.35);
+      this.decorGroup.add(pagoda);
+
+      // Sunken Open Treasure Chest + Overflowing Gold Coins (Left-Midground)
+      const chestGroup = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.52, 0.65), woodMat);
+      base.position.y = 0.26;
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 1.05, 14, 1, false, 0, Math.PI), woodMat);
+      lid.rotation.z = Math.PI / 2;
+      lid.rotation.x = -0.55;
+      lid.position.set(0, 0.56, -0.12);
+      const goldMound = new THREE.Mesh(new THREE.DodecahedronGeometry(0.34, 2), goldMat);
+      goldMound.scale.set(1.2, 0.6, 0.8);
+      goldMound.position.set(0, 0.45, 0.02);
+      const lock = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.06), goldMat);
+      lock.position.set(0, 0.38, 0.34);
+      chestGroup.add(base, lid, goldMound, lock);
+      chestGroup.position.set(-1.55, baseY + 0.08, -0.82);
+      chestGroup.rotation.y = 0.42;
+      this.decorGroup.add(chestGroup);
+
+      // Giant Luminous Pearl Clamshell (Right-Midground)
+      const clamGroup = new THREE.Group();
+      const shellBot = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.4, 0.14, 14), goldMat);
+      const shellTop = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.42, 0.12, 14), goldMat);
+      shellTop.position.set(0, 0.38, -0.32);
+      shellTop.rotation.x = -0.95;
+      const pearl = new THREE.Mesh(new THREE.SphereGeometry(0.22, 18, 18), pearlMat);
+      pearl.position.set(0, 0.24, 0);
+      clamGroup.add(shellBot, shellTop, pearl);
+      clamGroup.position.set(1.72, baseY + 0.12, -0.85);
+      clamGroup.rotation.y = -0.45;
+      this.decorGroup.add(clamGroup);
+      this.themeAnimatedNodes.push({ obj: pearl, kind: 'bob', baseX: 0, baseY: 0.24, baseZ: 0, phase: 0.5, speed: 2.0 });
+    } else if (themeId === 'dendy_castle') {
+      // GRAND 8-BIT FAMICOM FORTRESS PANORAMA + WARP PIPES + FLOATING ? BLOCKS + COINS
+      const brickMat = new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.85 });
+      const darkBrick = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
+      const roofMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.45 });
+      const pipeMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.25, metalness: 0.15 });
+      const goldBlockMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, emissiveIntensity: 0.45, roughness: 0.25 });
+      const flagMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0x991b1b, emissiveIntensity: 0.3 });
 
       const castle = new THREE.Group();
-      castle.add(tower, roof);
-      castle.position.set(0.5, this.tankBounds.minY, -0.9);
+
+      // Main Curtain Wall + Battlements
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.05, 0.72), brickMat);
+      wall.position.set(0, 0.525, 0);
+      castle.add(wall);
+
+      const gate = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.65, 0.76), darkBrick);
+      gate.position.set(0, 0.325, 0.02);
+      castle.add(gate);
+
+      // Central Grand Keep + Pointed Cobalt Spire + Red Pennant
+      const keep = new THREE.Mesh(new THREE.BoxGeometry(1.05, 2.0, 0.95), brickMat);
+      keep.position.set(0, 1.0, 0);
+      const keepRoof = new THREE.Mesh(new THREE.ConeGeometry(0.84, 0.95, 4), roofMat);
+      keepRoof.rotation.y = Math.PI / 4;
+      keepRoof.position.set(0, 2.48, 0);
+      const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.55, 6), goldBlockMat);
+      flagPole.position.set(0, 3.15, 0);
+      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 0.04), flagMat);
+      flag.position.set(0.18, 3.3, 0);
+      castle.add(keep, keepRoof, flagPole, flag);
+
+      // Twin Flanking Watchtowers
+      [-1.25, 1.25].forEach((wx) => {
+        const wTower = new THREE.Mesh(new THREE.BoxGeometry(0.68, 1.55, 0.78), brickMat);
+        wTower.position.set(wx, 0.775, 0.08);
+        const wRoof = new THREE.Mesh(new THREE.ConeGeometry(0.56, 0.65, 4), roofMat);
+        wRoof.rotation.y = Math.PI / 4;
+        wRoof.position.set(wx, 1.88, 0.08);
+        castle.add(wTower, wRoof);
+      });
+
+      castle.position.set(0.05, baseY + 0.08, -1.45);
       this.decorGroup.add(castle);
-    } else if (themeId === 'tokyo_neon_96') {
-      const neonMatCyan = new THREE.MeshStandardMaterial({ color: 0x06b6d4, emissive: 0x0891b2, roughness: 0.2 });
-      const neonMatMagenta = new THREE.MeshStandardMaterial({ color: 0xd946ef, emissive: 0xc026d3, roughness: 0.2 });
 
-      const col1 = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.8, 8), neonMatCyan);
-      col1.position.set(-0.8, this.tankBounds.minY + 0.9, -1.2);
-      const col2 = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.8, 8), neonMatMagenta);
-      col2.position.set(0.8, this.tankBounds.minY + 0.9, -1.2);
+      // Iconic Emerald 8-Bit Warp Pipes on Flanks
+      [-2.15, 2.25].forEach((px, idx) => {
+        const pipeH = idx === 0 ? 0.95 : 1.25;
+        const pipeGroup = new THREE.Group();
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, pipeH, 16), pipeMat);
+        shaft.position.y = pipeH / 2;
+        const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16), pipeMat);
+        lip.position.y = pipeH;
+        pipeGroup.add(shaft, lip);
+        pipeGroup.position.set(px, baseY + 0.05, -0.85);
+        this.decorGroup.add(pipeGroup);
+      });
 
-      this.decorGroup.add(col1, col2);
+      // Bobbing Floating '?' Blocks & Spinning Gold Pixel Coins
+      const blockTex = this.makeRetroSignTexture('?', '8-BIT', '#facc15', '#b45309');
+      const blockMat = new THREE.MeshStandardMaterial({ map: blockTex, roughness: 0.3 });
+      [-1.35, 1.45].forEach((bx, idx) => {
+        const qBlock = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), blockMat);
+        const by = baseY + 2.45 + idx * 0.25;
+        qBlock.position.set(bx, by, -0.85);
+        this.decorGroup.add(qBlock);
+        this.themeAnimatedNodes.push({ obj: qBlock, kind: 'bob', baseX: bx, baseY: by, baseZ: -0.85, phase: idx * 1.5, speed: 2.2 });
+      });
+
+      [-0.75, 0.85].forEach((cx, idx) => {
+        const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.05, 12), goldBlockMat);
+        coin.rotation.x = Math.PI / 2;
+        const cy = baseY + 2.75;
+        coin.position.set(cx, cy, -0.95);
+        this.decorGroup.add(coin);
+        this.themeAnimatedNodes.push({ obj: coin, kind: 'spinY', baseX: cx, baseY: cy, baseZ: -0.95, phase: idx, speed: 2.4 });
+      });
     }
   }
 
@@ -819,7 +1314,34 @@ export class AquariumScene {
     this.scene.background = baseWater;
     if (this.scene.fog instanceof THREE.FogExp2) {
       this.scene.fog.color.copy(baseFog);
-      this.scene.fog.density = 0.095 + murk * 0.14;
+      this.scene.fog.density = 0.08 + murk * 0.14;
+    }
+
+    // Theme-reactive lighting mood so each theme transforms the whole tank!
+    const topColors: Record<AquariumThemeId, number> = {
+      tokyo_neon_96: 0x38bdf8,
+      zen_garden: 0xfef08a,
+      dendy_castle: 0x93c5fd,
+      sakura_shrine: 0xfbcfe8,
+      golden_palace: 0xfde047,
+    };
+    const rimColors: Record<AquariumThemeId, number> = {
+      tokyo_neon_96: 0xe879f9,
+      zen_garden: 0x34d399,
+      dendy_castle: 0xf59e0b,
+      sakura_shrine: 0xf472b6,
+      golden_palace: 0xf59e0b,
+    };
+
+    if (this.waterTopLight) {
+      this.waterTopLight.color.setHex(topColors[this.currentThemeId] || 0x7dd3fc);
+      this.waterTopLight.intensity = 2.2 * (theme.ambientIntensity || 1.0);
+    }
+    if (this.rimLight) {
+      this.rimLight.color.setHex(rimColors[this.currentThemeId] || 0xa5f3fc);
+    }
+    if (this.godRayMaterial) {
+      this.godRayMaterial.color.setHex(topColors[this.currentThemeId] || 0x93c5fd);
     }
   }
 
@@ -1036,6 +1558,7 @@ export class AquariumScene {
       this.updatePlankton(delta);
       this.updateFood(delta);
       this.updateRipples(delta);
+      this.updateThemeProps(delta, time);
 
       // Gentle aquatic flora sway
       for (let p = 0; p < this.plantMeshes.length; p++) {
@@ -1054,7 +1577,7 @@ export class AquariumScene {
 
       // Smooth camera damping (subtle floating focus on fish)
       const targetCamX = THREE.MathUtils.clamp(this.fish.currentPosition.x * 0.16, -0.5, 0.5);
-      const targetCamY = THREE.MathUtils.clamp(0.22 + this.fish.currentPosition.y * 0.12, -0.2, 0.6);
+      const targetCamY = THREE.MathUtils.clamp(0.24 + this.fish.currentPosition.y * 0.12, -0.2, 0.6);
       this.camera.position.x = THREE.MathUtils.damp(this.camera.position.x, targetCamX, 1.8, delta);
       this.camera.position.y = THREE.MathUtils.damp(this.camera.position.y, targetCamY, 1.8, delta);
       this.camera.position.z = THREE.MathUtils.damp(this.camera.position.z, this.currentCameraPos.z, 2.5, delta);
@@ -1073,6 +1596,28 @@ export class AquariumScene {
       this.afterDraw(tick);
     } else {
       this.animFrameId = requestAnimationFrame(tick);
+    }
+  }
+
+  private updateThemeProps(delta: number, time: number) {
+    for (let i = 0; i < this.themeAnimatedNodes.length; i++) {
+      const n = this.themeAnimatedNodes[i];
+      if (n.kind === 'spin') {
+        n.obj.rotation.z += delta * n.speed;
+      } else if (n.kind === 'spinY') {
+        n.obj.rotation.y += delta * n.speed;
+      } else if (n.kind === 'bob') {
+        n.obj.position.y = n.baseY + Math.sin(time * n.speed + n.phase) * 0.08;
+        n.obj.rotation.y += delta * 0.7;
+      } else if (n.kind === 'petal') {
+        n.obj.position.y -= n.speed * delta;
+        n.obj.position.x = n.baseX + Math.sin(time * 1.4 + n.phase) * 0.25;
+        n.obj.rotation.z += delta * 0.8;
+        n.obj.rotation.x += delta * 0.5;
+        if (n.obj.position.y < this.tankBounds.minY + 0.08) {
+          n.obj.position.y = this.tankBounds.maxY - 0.15;
+        }
+      }
     }
   }
 
@@ -1105,6 +1650,7 @@ export class AquariumScene {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
+    this.disposeGroupResources(this.decorGroup);
     this.fish.dispose();
     this.causticTexture.dispose();
     this.sandTexture.dispose();

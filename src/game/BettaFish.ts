@@ -21,6 +21,18 @@ interface PaletteColors {
 }
 
 const BETTA_PALETTES: Record<FishColorPalette, PaletteColors> = {
+  tropical_paradise: {
+    bodyBase: '#0891b2',      // Luminous tropical lagoon turquoise
+    bodyHighlight: '#34d399', // Electric emerald-aqua scales
+    headMask: '#064e3b',      // Deep tropical jade mask
+    finBase: '#f97316',       // Vivid coral tangerine
+    finMid: '#ec4899',        // Hibiscus magenta-pink
+    finRim: '#fde047',        // Sunburst lemon-gold edge
+    iridescenceTint: '#22d3ee',
+    eyeIris: '#fde047',
+    gillMembrane: '#be123c',
+    pelvicTip: '#fef08a',
+  },
   royal_blue: {
     bodyBase: '#1e3a8a',
     bodyHighlight: '#3b82f6',
@@ -189,14 +201,14 @@ export class BettaFish {
   public currentSkinId: FishColorPalette = 'royal_blue';
   private isSoftwareGl: boolean = false;
 
-  constructor(skinId: FishColorPalette = 'royal_blue', isSoftwareGl = false) {
+  constructor(skinId: FishColorPalette = 'tropical_paradise', isSoftwareGl = false) {
     this.isSoftwareGl = isSoftwareGl;
     this.group = new THREE.Group();
     this.fishRoot = new THREE.Group();
     this.vipCrownGroup = new THREE.Group();
     this.currentSkinId = skinId;
 
-    this.initTextures(BETTA_PALETTES[skinId] || BETTA_PALETTES.royal_blue);
+    this.initTextures(BETTA_PALETTES[skinId] || BETTA_PALETTES.tropical_paradise);
     this.initMaterials();
     this.buildSculptedBody();
     this.buildMouthAndGills();
@@ -291,24 +303,58 @@ export class BettaFish {
     this.pectoralTexture.colorSpace = THREE.SRGBColorSpace;
   }
 
-  private paintBodySkin(ctx: CanvasRenderingContext2D, p: PaletteColors) {
+  private paintBodySkin(ctx: CanvasRenderingContext2D, p: PaletteColors, skinId: FishColorPalette = this.currentSkinId) {
+    const isTropical = skinId === 'tropical_paradise';
+
     // U runs 0 (snout) -> 1 (peduncle). V runs around circumference.
     const baseGrad = ctx.createLinearGradient(0, 0, 1024, 0);
-    baseGrad.addColorStop(0.0, p.headMask);
-    baseGrad.addColorStop(0.18, p.headMask);
-    baseGrad.addColorStop(0.32, p.bodyBase);
-    baseGrad.addColorStop(0.85, p.bodyBase);
-    baseGrad.addColorStop(1.0, p.finBase);
+    if (isTropical) {
+      baseGrad.addColorStop(0.0, p.headMask);
+      baseGrad.addColorStop(0.16, '#0f766e');
+      baseGrad.addColorStop(0.32, '#06b6d4');
+      baseGrad.addColorStop(0.62, '#10b981');
+      baseGrad.addColorStop(0.84, '#f97316');
+      baseGrad.addColorStop(1.0, '#ec4899');
+    } else {
+      baseGrad.addColorStop(0.0, p.headMask);
+      baseGrad.addColorStop(0.18, p.headMask);
+      baseGrad.addColorStop(0.32, p.bodyBase);
+      baseGrad.addColorStop(0.85, p.bodyBase);
+      baseGrad.addColorStop(1.0, p.finBase);
+    }
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, 1024, 512);
 
+    // Tropical Reef Koi Saddle Patches (coral-orange, hibiscus magenta & sunlit gold splashes)
+    if (isTropical) {
+      const patches = [
+        { x: 380, y: 125, rx: 120, ry: 58, color: 'rgba(249, 115, 22, 0.72)' },
+        { x: 380, y: 385, rx: 120, ry: 58, color: 'rgba(249, 115, 22, 0.72)' },
+        { x: 640, y: 256, rx: 145, ry: 72, color: 'rgba(236, 72, 153, 0.65)' },
+        { x: 520, y: 85, rx: 95, ry: 44, color: 'rgba(250, 204, 21, 0.68)' },
+        { x: 520, y: 425, rx: 95, ry: 44, color: 'rgba(250, 204, 21, 0.68)' },
+        { x: 850, y: 180, rx: 110, ry: 60, color: 'rgba(251, 146, 60, 0.75)' },
+        { x: 850, y: 332, rx: 110, ry: 60, color: 'rgba(251, 146, 60, 0.75)' },
+      ];
+      for (const patch of patches) {
+        const pg = ctx.createRadialGradient(patch.x, patch.y, 8, patch.x, patch.y, patch.rx);
+        pg.addColorStop(0, patch.color);
+        pg.addColorStop(0.65, patch.color.replace(/0\.\d+/, '0.35'));
+        pg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = pg;
+        ctx.beginPath();
+        ctx.ellipse(patch.x, patch.y, patch.rx, patch.ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     // Subtle lateral iridescent sheen band
     const flankGrad = ctx.createLinearGradient(0, 0, 0, 512);
-    flankGrad.addColorStop(0.0, 'rgba(0,0,0,0.25)'); // belly/ventral
-    flankGrad.addColorStop(0.25, 'rgba(255,255,255,0.08)'); // flank
-    flankGrad.addColorStop(0.5, 'rgba(0,0,0,0.35)'); // dorsal dark spine
-    flankGrad.addColorStop(0.75, 'rgba(255,255,255,0.08)'); // opposite flank
-    flankGrad.addColorStop(1.0, 'rgba(0,0,0,0.25)');
+    flankGrad.addColorStop(0.0, 'rgba(0,0,0,0.22)'); // belly/ventral
+    flankGrad.addColorStop(0.25, 'rgba(255,255,255,0.1)'); // flank
+    flankGrad.addColorStop(0.5, isTropical ? 'rgba(6, 78, 59, 0.25)' : 'rgba(0,0,0,0.35)'); // dorsal spine
+    flankGrad.addColorStop(0.75, 'rgba(255,255,255,0.1)'); // opposite flank
+    flankGrad.addColorStop(1.0, 'rgba(0,0,0,0.22)');
     ctx.fillStyle = flankGrad;
     ctx.fillRect(0, 0, 1024, 512);
 
@@ -327,20 +373,32 @@ export class BettaFish {
         const cx = c * cw;
         const cy = (r + (c % 2 === 0 ? 0 : 0.5)) * ch;
 
+        // Pick sparkling jewel-tone accents on tropical fish
+        const tropicalShift = (c * 7 + r * 11) % 9;
+        const centerColor = isTropical
+          ? tropicalShift === 0
+            ? '#fde047'
+            : tropicalShift === 3
+            ? '#22d3ee'
+            : tropicalShift === 6
+            ? '#fb7185'
+            : p.bodyHighlight
+          : p.bodyHighlight;
+
         // Scale metallic center highlight
         ctx.save();
-        ctx.globalAlpha = 0.72 * scaleAlpha;
+        ctx.globalAlpha = (isTropical ? 0.78 : 0.72) * scaleAlpha;
         const sg = ctx.createRadialGradient(cx - cw * 0.1, cy, 1, cx, cy, ch * 0.58);
-        sg.addColorStop(0, p.bodyHighlight);
-        sg.addColorStop(0.65, p.bodyBase);
-        sg.addColorStop(1, 'rgba(0,0,0,0.55)');
+        sg.addColorStop(0, centerColor);
+        sg.addColorStop(0.65, isTropical && u > 0.72 ? p.finBase : p.bodyBase);
+        sg.addColorStop(1, 'rgba(0,0,0,0.48)');
         ctx.fillStyle = sg;
         ctx.beginPath();
         ctx.arc(cx, cy, ch * 0.56, 0, Math.PI * 2);
         ctx.fill();
 
         // Crisp dark pocket rim
-        ctx.globalAlpha = 0.42 * scaleAlpha;
+        ctx.globalAlpha = 0.4 * scaleAlpha;
         ctx.strokeStyle = '#05050a';
         ctx.lineWidth = 1.6;
         ctx.beginPath();
@@ -351,20 +409,50 @@ export class BettaFish {
     }
   }
 
-  private paintCaudalTexture(ctx: CanvasRenderingContext2D, p: PaletteColors) {
+  private paintCaudalTexture(ctx: CanvasRenderingContext2D, p: PaletteColors, skinId: FishColorPalette = this.currentSkinId) {
+    const isTropical = skinId === 'tropical_paradise';
     ctx.clearRect(0, 0, 512, 512);
 
     // U (x: 0..512) = radial distance from root (0) to outer tip (512)
     // V (y: 0..512) = angular span across fan
     const grad = ctx.createLinearGradient(0, 0, 512, 0);
-    grad.addColorStop(0.0, this.hexToRgba(p.bodyBase, 0.98));
-    grad.addColorStop(0.18, this.hexToRgba(p.finBase, 0.92));
-    grad.addColorStop(0.55, this.hexToRgba(p.finMid, 0.82));
-    grad.addColorStop(0.82, this.hexToRgba(p.finRim, 0.72));
-    grad.addColorStop(0.95, this.hexToRgba(p.finRim, 0.45));
-    grad.addColorStop(1.0, this.hexToRgba(p.finRim, 0.05));
+    if (isTropical) {
+      grad.addColorStop(0.0, 'rgba(6, 182, 212, 0.98)');   // Electric lagoon turquoise root
+      grad.addColorStop(0.22, 'rgba(249, 115, 22, 0.94)'); // Coral tangerine mid-inner
+      grad.addColorStop(0.55, 'rgba(236, 72, 153, 0.86)'); // Hibiscus magenta middle
+      grad.addColorStop(0.82, 'rgba(250, 204, 21, 0.76)'); // Sunburst gold outer band
+      grad.addColorStop(0.95, 'rgba(103, 232, 249, 0.5)'); // Aqua translucent lace trim
+      grad.addColorStop(1.0, 'rgba(254, 240, 138, 0.08)');
+    } else {
+      grad.addColorStop(0.0, this.hexToRgba(p.bodyBase, 0.98));
+      grad.addColorStop(0.18, this.hexToRgba(p.finBase, 0.92));
+      grad.addColorStop(0.55, this.hexToRgba(p.finMid, 0.82));
+      grad.addColorStop(0.82, this.hexToRgba(p.finRim, 0.72));
+      grad.addColorStop(0.95, this.hexToRgba(p.finRim, 0.45));
+      grad.addColorStop(1.0, this.hexToRgba(p.finRim, 0.05));
+    }
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 512);
+
+    // Tropical Koi spotting along fin fan
+    if (isTropical) {
+      const spots = [
+        { x: 110, y: 120, r: 34, c: 'rgba(253, 224, 71, 0.32)' },
+        { x: 170, y: 260, r: 42, c: 'rgba(34, 211, 238, 0.28)' },
+        { x: 130, y: 390, r: 36, c: 'rgba(253, 224, 71, 0.32)' },
+        { x: 295, y: 175, r: 30, c: 'rgba(251, 113, 133, 0.3)' },
+        { x: 280, y: 345, r: 32, c: 'rgba(52, 211, 153, 0.26)' },
+      ];
+      for (const sp of spots) {
+        const sg = ctx.createRadialGradient(sp.x, sp.y, 2, sp.x, sp.y, sp.r);
+        sg.addColorStop(0, sp.c);
+        sg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = sg;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
     // Delicate butterfly banding / marbled veining
     ctx.fillStyle = this.hexToRgba(p.bodyHighlight, 0.14);
@@ -388,7 +476,7 @@ export class BettaFish {
       const y = (i + 0.5) * (512 / numRays);
 
       // Thick primary ray from base to bifurcation point
-      ctx.strokeStyle = this.hexToRgba(p.bodyHighlight, 0.55);
+      ctx.strokeStyle = this.hexToRgba(isTropical ? '#67e8f9' : p.bodyHighlight, 0.62);
       ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.moveTo(0, y);
@@ -396,7 +484,7 @@ export class BettaFish {
       ctx.stroke();
 
       // Secondary split
-      ctx.strokeStyle = this.hexToRgba(p.finRim, 0.45);
+      ctx.strokeStyle = this.hexToRgba(p.finRim, 0.48);
       ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.moveTo(170, y);
@@ -406,7 +494,7 @@ export class BettaFish {
       ctx.stroke();
 
       // Tertiary delicate split to edge
-      ctx.strokeStyle = this.hexToRgba(p.finRim, 0.35);
+      ctx.strokeStyle = this.hexToRgba(isTropical ? '#fef08a' : p.finRim, 0.38);
       ctx.lineWidth = 0.9;
       ctx.beginPath();
       ctx.moveTo(350, y - 3.2);
@@ -432,17 +520,24 @@ export class BettaFish {
     }
   }
 
-  private paintSailTexture(ctx: CanvasRenderingContext2D, p: PaletteColors) {
+  private paintSailTexture(ctx: CanvasRenderingContext2D, p: PaletteColors, skinId: FishColorPalette = this.currentSkinId) {
+    const isTropical = skinId === 'tropical_paradise';
     ctx.clearRect(0, 0, 512, 512);
 
-    // V=0 (y=512 in canvas if flipped? Wait: Three.js PlaneGeometry v=0 at bottom -> canvas y=512, v=1 at top -> canvas y=0)
-    // We'll map UV directly: v=0 at fin base (body attachment), v=1 at outer flowing tip!
     const grad = ctx.createLinearGradient(0, 512, 0, 0);
-    grad.addColorStop(0.0, this.hexToRgba(p.bodyBase, 0.98));
-    grad.addColorStop(0.22, this.hexToRgba(p.finBase, 0.92));
-    grad.addColorStop(0.6, this.hexToRgba(p.finMid, 0.8));
-    grad.addColorStop(0.88, this.hexToRgba(p.finRim, 0.65));
-    grad.addColorStop(1.0, this.hexToRgba(p.finRim, 0.12));
+    if (isTropical) {
+      grad.addColorStop(0.0, 'rgba(8, 145, 178, 0.98)');
+      grad.addColorStop(0.24, 'rgba(249, 115, 22, 0.92)');
+      grad.addColorStop(0.58, 'rgba(236, 72, 153, 0.84)');
+      grad.addColorStop(0.86, 'rgba(250, 204, 21, 0.7)');
+      grad.addColorStop(1.0, 'rgba(103, 232, 249, 0.16)');
+    } else {
+      grad.addColorStop(0.0, this.hexToRgba(p.bodyBase, 0.98));
+      grad.addColorStop(0.22, this.hexToRgba(p.finBase, 0.92));
+      grad.addColorStop(0.6, this.hexToRgba(p.finMid, 0.8));
+      grad.addColorStop(0.88, this.hexToRgba(p.finRim, 0.65));
+      grad.addColorStop(1.0, this.hexToRgba(p.finRim, 0.12));
+    }
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 512);
 
@@ -452,7 +547,7 @@ export class BettaFish {
       const baseX = (i / numRays) * 440 + 10;
       const tipX = Math.min(508, baseX + 65 + (i / numRays) * 35);
 
-      ctx.strokeStyle = this.hexToRgba(p.bodyHighlight, 0.5);
+      ctx.strokeStyle = this.hexToRgba(isTropical ? '#67e8f9' : p.bodyHighlight, 0.56);
       ctx.lineWidth = 2.2;
       ctx.beginPath();
       ctx.moveTo(baseX, 512);
@@ -460,7 +555,7 @@ export class BettaFish {
       ctx.stroke();
 
       // Secondary ray highlight
-      ctx.strokeStyle = this.hexToRgba(p.finRim, 0.38);
+      ctx.strokeStyle = this.hexToRgba(p.finRim, 0.42);
       ctx.lineWidth = 1.1;
       ctx.beginPath();
       ctx.moveTo((baseX + tipX) * 0.5, 256);
@@ -469,17 +564,18 @@ export class BettaFish {
     }
   }
 
-  private paintPectoralTexture(ctx: CanvasRenderingContext2D, p: PaletteColors) {
+  private paintPectoralTexture(ctx: CanvasRenderingContext2D, p: PaletteColors, skinId: FishColorPalette = this.currentSkinId) {
+    const isTropical = skinId === 'tropical_paradise';
     ctx.clearRect(0, 0, 256, 256);
     const grad = ctx.createRadialGradient(20, 128, 5, 110, 128, 160);
-    grad.addColorStop(0.0, this.hexToRgba(p.bodyHighlight, 0.65));
-    grad.addColorStop(0.45, this.hexToRgba(p.finRim, 0.35));
-    grad.addColorStop(0.85, 'rgba(255, 255, 255, 0.22)');
+    grad.addColorStop(0.0, this.hexToRgba(isTropical ? '#22d3ee' : p.bodyHighlight, 0.72));
+    grad.addColorStop(0.45, this.hexToRgba(isTropical ? '#fb923c' : p.finRim, 0.42));
+    grad.addColorStop(0.85, this.hexToRgba(isTropical ? '#fde047' : '#ffffff', 0.28));
     grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.02)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 256, 256);
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.strokeStyle = isTropical ? 'rgba(254, 240, 138, 0.55)' : 'rgba(255, 255, 255, 0.45)';
     ctx.lineWidth = 1.2;
     for (let i = -8; i <= 8; i++) {
       const angle = i * 0.08;
@@ -1030,20 +1126,20 @@ export class BettaFish {
 
   public updateSkin(skinId: FishColorPalette) {
     this.currentSkinId = skinId;
-    const palette = BETTA_PALETTES[skinId] || BETTA_PALETTES.royal_blue;
-    const preset = FISH_SKINS[skinId] || FISH_SKINS.royal_blue;
+    const palette = BETTA_PALETTES[skinId] || BETTA_PALETTES.tropical_paradise;
+    const preset = FISH_SKINS[skinId] || FISH_SKINS.tropical_paradise;
 
     // Repaint all procedural textures with the exact palette
-    this.paintBodySkin(this.bodyTexture.image.getContext('2d')!, palette);
+    this.paintBodySkin(this.bodyTexture.image.getContext('2d')!, palette, skinId);
     this.bodyTexture.needsUpdate = true;
 
-    this.paintCaudalTexture(this.caudalTexture.image.getContext('2d')!, palette);
+    this.paintCaudalTexture(this.caudalTexture.image.getContext('2d')!, palette, skinId);
     this.caudalTexture.needsUpdate = true;
 
-    this.paintSailTexture(this.sailTexture.image.getContext('2d')!, palette);
+    this.paintSailTexture(this.sailTexture.image.getContext('2d')!, palette, skinId);
     this.sailTexture.needsUpdate = true;
 
-    this.paintPectoralTexture(this.pectoralTexture.image.getContext('2d')!, palette);
+    this.paintPectoralTexture(this.pectoralTexture.image.getContext('2d')!, palette, skinId);
     this.pectoralTexture.needsUpdate = true;
 
     this.bodyMaterial.sheenColor = new THREE.Color(palette.iridescenceTint);

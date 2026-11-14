@@ -4,12 +4,13 @@
  */
 
 export type FishColorPalette = 
-  | 'royal_blue'      // Classic iridescent Royal Blue + Violet
-  | 'ruby_dragon'     // Fiery Crimson Red + Gold
-  | 'cyan_halfmoon'   // Turquoise Cyan + Emerald
-  | 'black_samurai'   // Stealth Black + Metallic Silver
-  | 'golden_imperial' // VIP Golden Sheen + Diamond Sparkle
-  | 'sakura_blossom'; // Pastel Pink + Pearl White
+  | 'tropical_paradise' // Vibrant Lagoon Turquoise + Coral Orange + Sunset Gold
+  | 'royal_blue'        // Classic iridescent Royal Blue + Violet
+  | 'ruby_dragon'       // Fiery Crimson Red + Gold
+  | 'cyan_halfmoon'     // Turquoise Cyan + Emerald
+  | 'black_samurai'     // Stealth Black + Metallic Silver
+  | 'golden_imperial'   // VIP Golden Sheen + Diamond Sparkle
+  | 'sakura_blossom';   // Pastel Pink + Pearl White
 
 export interface FishSkin {
   id: FishColorPalette;
