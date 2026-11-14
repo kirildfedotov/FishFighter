@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Volume2, VolumeX, Music, Tv, Edit2, Check, Smartphone, Monitor } from 'lucide-react';
+import { Volume2, VolumeX, Music, Tv, Edit2, Check } from 'lucide-react';
 import { FishStats } from '../types';
 import { retroAudio } from '../services/retroAudio';
 
@@ -13,8 +13,6 @@ interface RetroHeaderProps {
   onUpdateName: (newName: string) => void;
   crtEnabled: boolean;
   onToggleCrt: () => void;
-  shellMode: boolean;
-  onToggleShell: () => void;
   bgmActive: boolean;
   onToggleBgm: () => void;
   soundMuted: boolean;
@@ -26,8 +24,6 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
   onUpdateName,
   crtEnabled,
   onToggleCrt,
-  shellMode,
-  onToggleShell,
   bgmActive,
   onToggleBgm,
   soundMuted,
@@ -175,80 +171,70 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
           </div>
         </div>
 
-        {/* Right: Currency & Toggles */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
-          <div className="flex items-center gap-1 bg-[#1a1b2e] border-2 border-[#b45309] px-1.5 sm:px-2 py-1 rounded text-[11px] sm:text-xs font-mono text-[#fde047] shadow">
+        {/* Right: Currency & Unified Utility Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1 bg-[#161830] border-2 border-[#b45309] px-2 py-1 rounded-md text-[11px] sm:text-xs font-mono text-[#fde047] shadow-inner">
             <span>🪙</span>
             <span className="tabular-nums font-bold">{stats.coins}</span>
           </div>
 
-          <div className="flex items-center gap-1 bg-[#231535] border-2 border-[#a855f7] px-1.5 sm:px-2 py-1 rounded text-[11px] sm:text-xs font-mono text-[#f0abfc] shadow">
+          <div className="flex items-center gap-1 bg-[#1e1233] border-2 border-[#9333ea] px-2 py-1 rounded-md text-[11px] sm:text-xs font-mono text-[#f0abfc] shadow-inner">
             <span>🦪</span>
             <span className="tabular-nums font-bold">{stats.pearls}</span>
           </div>
 
           <button
+            type="button"
             onClick={() => {
               onToggleBgm();
               retroAudio.playBlip(620, 0.05);
             }}
-            className={`p-1.5 sm:p-2 rounded border-2 transition cursor-pointer ${
+            className={`arcade-btn px-2 py-1.5 text-[11px] ${
               bgmActive
-                ? 'bg-[#4338ca] border-[#818cf8] text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]'
-                : 'bg-[#1e1b4b] border-[#312e81] text-[#94a3b8] hover:text-white'
+                ? 'bg-[#4338ca] border-[#818cf8] text-white'
+                : 'bg-[#161830] border-[#312e81] text-[#94a3b8] hover:text-white hover:border-[#6366f1]'
             }`}
-            title="Фоновая 8-бит музыка Dendy (BGM)"
+            title="Фоновая 8-бит музыка"
             aria-label="Фоновая музыка"
           >
-            <Music className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <Music className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden md:inline">МУЗ</span>
           </button>
 
           <button
+            type="button"
             onClick={() => {
               onToggleMute();
               retroAudio.playBlip(550, 0.05);
             }}
-            className={`p-1.5 sm:p-2 rounded border-2 transition cursor-pointer ${
+            className={`arcade-btn px-2 py-1.5 text-[11px] ${
               !soundMuted
                 ? 'bg-[#15803d] border-[#4ade80] text-white'
-                : 'bg-[#1e1e2f] border-[#475569] text-[#64748b]'
+                : 'bg-[#161830] border-[#475569] text-[#94a3b8] hover:text-white'
             }`}
-            title="Звуковые эффекты (SFX)"
+            title="Звуковые эффекты"
             aria-label="Звуковые эффекты"
           >
-            {soundMuted ? <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+            {soundMuted ? <VolumeX className="w-3.5 h-3.5 shrink-0" /> : <Volume2 className="w-3.5 h-3.5 shrink-0" />}
+            <span className="hidden md:inline">ЗВУК</span>
           </button>
 
           <button
+            type="button"
             onClick={() => {
               onToggleCrt();
               retroAudio.playBlip(700, 0.06);
             }}
-            className={`p-1.5 sm:p-2 rounded border-2 transition hidden sm:inline-flex cursor-pointer ${
+            className={`arcade-btn px-2 py-1.5 text-[11px] hidden sm:inline-flex ${
               crtEnabled
-                ? 'bg-[#b91c1c] border-[#f87171] text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]'
-                : 'bg-[#1e1b4b] border-[#312e81] text-[#94a3b8] hover:text-white'
+                ? 'bg-[#b91c1c] border-[#f87171] text-white'
+                : 'bg-[#161830] border-[#312e81] text-[#94a3b8] hover:text-white hover:border-[#6366f1]'
             }`}
-            title="Ретро ЭЛТ-монитор и сканлайны (CRT 90s)"
+            title="Эффект ретро ЭЛТ-экрана"
             aria-label="Режим CRT"
           >
-            <Tv className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => {
-              onToggleShell();
-              retroAudio.playBlip(800, 0.06);
-            }}
-            className={`p-1.5 sm:p-2 rounded border-2 transition cursor-pointer ${
-              shellMode
-                ? 'bg-[#0369a1] border-[#38bdf8] text-white shadow-[0_0_10px_rgba(56,189,248,0.5)]'
-                : 'bg-[#1e1b4b] border-[#312e81] text-[#94a3b8] hover:text-white'
-            }`}
-            title={shellMode ? 'Переключить в полный экран' : 'Корпус Тамагочи 1996'}
-            aria-label="Режим корпуса Тамагочи"
-          >
-            {shellMode ? <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+            <Tv className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden md:inline">CRT</span>
           </button>
         </div>
       </div>

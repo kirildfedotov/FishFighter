@@ -320,32 +320,34 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 select-none">
-      <div className="bg-[#121326] border-4 border-[#ef4444] rounded-2xl w-full max-w-xl flex flex-col shadow-[0_0_35px_rgba(239,68,68,0.4)] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-black/85 select-none">
+      <div className="arcade-panel border-4 border-[#ef4444] w-full max-w-xl flex flex-col overflow-hidden">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#7f1d1d] via-[#b91c1c] to-[#7f1d1d] px-4 py-2.5 flex items-center justify-between border-b-2 border-black">
+        <div className="bg-[#290f16] px-4 py-2.5 flex items-center justify-between border-b-2 border-[#ef4444]">
           <div className="flex items-center gap-2">
             <span className="text-xl">🕹️</span>
             <div>
-              <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-[#fef08a] tracking-wider drop-shadow">
-                BETTA BUBBLE RUNNER &apos;96
+              <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-[#fef08a] tracking-wide">
+                ДЕНДИ: ЛОВЕЦ ЖЕМЧУЖИН
               </h2>
-              <div className="font-['DotGothic16'] text-[11px] text-red-200">
-                ファミコン ベタアクション
+              <div className="text-[11px] font-mono text-red-200">
+                Рекорд: {highScore} • Собирайте монеты и жемчуг
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 font-mono text-xs">
+          <div className="flex items-center gap-2.5 font-mono text-xs">
             <span className="text-[#facc15] font-bold">СЧЁТ: {score}</span>
-            <span className="text-red-400 font-bold">ЖИЗНИ: {lives}❤️</span>
+            <span className="text-red-300 font-bold">{lives} ❤️</span>
             <button
+              type="button"
               onClick={() => {
                 onClose();
                 retroAudio.playBlip(400, 0.04);
               }}
-              className="bg-black/50 hover:bg-black text-white p-1 rounded transition ml-2"
+              aria-label="Закрыть мини-игру"
+              className="arcade-btn bg-[#272744] hover:bg-[#383862] border-[#f87171] text-white p-1.5"
             >
               <X className="w-4 h-4" />
             </button>
@@ -371,8 +373,9 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
                 Ловите пузыри, мотыль и жемчужины! Уворачивайтесь от шипастых морских ежей.
               </p>
               <button
+                type="button"
                 onClick={startGame}
-                className="px-6 py-2.5 bg-[#ef4444] hover:bg-[#dc2626] text-white font-['Press_Start_2P'] text-xs rounded-lg shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95"
+                className="arcade-btn px-6 py-2.5 bg-[#ef4444] hover:bg-[#f87171] border-[#fecaca] text-white text-xs"
               >
                 <Play className="w-4 h-4 fill-white" /> СТАРТ
               </button>
@@ -388,13 +391,14 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
               <div className="font-mono text-xs text-[#fef08a] mb-2">
                 Итоговый счёт: <span className="text-base font-bold text-white">{score}</span>
               </div>
-              <div className="flex items-center gap-3 bg-[#1e1b4b] border border-[#6366f1] px-4 py-1.5 rounded-lg mb-4 text-xs font-mono">
+              <div className="flex items-center gap-3 bg-[#1e1b4b] border border-[#6366f1] px-4 py-1.5 rounded-md mb-4 text-xs font-mono">
                 <span className="text-[#facc15]">+{earnedCoins} 🪙 монет</span>
                 {earnedPearls > 0 && <span className="text-[#f0abfc]">+{earnedPearls} 🦪 жемчужин</span>}
               </div>
               <button
+                type="button"
                 onClick={startGame}
-                className="px-5 py-2 bg-[#22c55e] hover:bg-[#16a34a] text-black font-['Press_Start_2P'] text-xs rounded-lg shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95"
+                className="arcade-btn px-5 py-2.5 bg-[#22c55e] hover:bg-[#4ade80] border-[#86efac] text-black text-xs"
               >
                 <RotateCcw className="w-4 h-4" /> ЕЩЁ РАЗ
               </button>

@@ -50,63 +50,67 @@ export const DonateModal: React.FC<DonateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 select-none">
-      <div className="bg-[#100d1e] border-4 border-[#c084fc] rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-[0_0_40px_rgba(192,132,252,0.35)] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-black/85 select-none">
+      <div className="arcade-panel border-4 border-[#c084fc] w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#581c87] via-[#9333ea] to-[#581c87] px-4 py-3 flex items-center justify-between border-b-2 border-black">
+        <div className="bg-[#1c1033] px-4 py-3 flex items-center justify-between border-b-2 border-[#c084fc]">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#eab308] text-black flex items-center justify-center shadow font-black text-sm">
+            <div className="w-9 h-9 rounded-md bg-[#eab308] border-2 border-[#fef08a] text-black flex items-center justify-center shadow font-black text-xs">
               VIP
             </div>
             <div>
-              <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-[#fef08a] tracking-wider drop-shadow">
-                ДОНАТ & VIP КЛУБ &apos;96
+              <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-[#fef08a] tracking-wide">
+                VIP КЛУБ & ПОДДЕРЖКА
               </h2>
-              <div className="font-['DotGothic16'] text-xs text-purple-200">
-                スポンサーVIPシステム
+              <div className="text-[11px] font-mono text-purple-200">
+                Корона для рыбки, золотые темы и бонус x2
               </div>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={() => {
               onClose();
               retroAudio.playBlip(400, 0.04);
             }}
-            className="bg-black/50 hover:bg-black text-white p-1 rounded transition"
+            aria-label="Закрыть VIP клуб"
+            className="arcade-btn bg-[#272744] hover:bg-[#383862] border-[#a855f7] text-white p-1.5"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Tab switcher */}
-        <div className="flex border-b-2 border-[#4c1d95] bg-[#090714]">
+        {/* Unified Tab switcher */}
+        <div className="grid grid-cols-2 gap-2 p-2.5 border-b-2 border-[#4c1d95] bg-[#0b0918]">
           <button
+            type="button"
             onClick={() => {
               setActiveTab('tiers');
               retroAudio.playBlip(550, 0.03);
             }}
-            className={`flex-1 py-2 font-['Press_Start_2P'] text-[10px] sm:text-xs transition ${
+            className={`arcade-btn py-2 px-3 text-xs ${
               activeTab === 'tiers'
-                ? 'bg-[#2e1065] text-[#f0abfc] border-b-2 border-[#c084fc]'
-                : 'text-[#94a3b8] hover:text-white'
+                ? 'bg-[#c084fc] border-[#f3e8ff] text-black'
+                : 'bg-[#171230] border-[#4c1d95] text-[#cbd5e1] hover:border-[#a855f7]'
             }`}
           >
-            ⭐ ТАРИФЫ & ПРИВИЛЕГИИ
+            ⭐ Тарифы VIP
           </button>
           <button
+            type="button"
             onClick={() => {
               setActiveTab('methods');
               retroAudio.playBlip(550, 0.03);
             }}
-            className={`flex-1 py-2 font-['Press_Start_2P'] text-[10px] sm:text-xs transition ${
+            className={`arcade-btn py-2 px-3 text-xs ${
               activeTab === 'methods'
-                ? 'bg-[#2e1065] text-[#f0abfc] border-b-2 border-[#c084fc]'
-                : 'text-[#94a3b8] hover:text-white'
+                ? 'bg-[#c084fc] border-[#f3e8ff] text-black'
+                : 'bg-[#171230] border-[#4c1d95] text-[#cbd5e1] hover:border-[#a855f7]'
             }`}
           >
-            💳 РЕКВИЗИТЫ ОПЛАТЫ
+            💳 Реквизиты оплаты
           </button>
         </div>
 
@@ -174,13 +178,14 @@ export const DonateModal: React.FC<DonateModalProps> = ({
 
                       <div className="mt-3 pt-2 border-t border-[#4c1d95]">
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDemoActivate(tier);
                           }}
-                          className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-[#eab308] to-[#f59e0b] hover:from-[#facc15] hover:to-[#eab308] text-black font-['Press_Start_2P'] text-[9px] tracking-wider font-bold shadow transition cursor-pointer active:scale-95"
+                          className="arcade-btn w-full py-2 px-3 bg-[#eab308] hover:bg-[#facc15] border-[#fef08a] text-black text-xs"
                         >
-                          ПОДДЕРЖАТЬ
+                          Активировать
                         </button>
                       </div>
                     </div>

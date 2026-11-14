@@ -11,7 +11,6 @@ import { ShopModal } from './components/ShopModal';
 import { DonateModal } from './components/DonateModal';
 import { MiniGameModal } from './components/MiniGameModal';
 import { MirrorModal } from './components/MirrorModal';
-import { TamagotchiShell } from './components/TamagotchiShell';
 import { SplashScreen } from './components/SplashScreen';
 import { loadFishStats, saveFishStats, FOOD_ITEMS, FISH_SKINS, AQUARIUM_THEMES } from './services/storage';
 import { FishStats, FoodType, FishColorPalette, AquariumThemeId, DonationTier } from './types';
@@ -43,7 +42,6 @@ function applyExperience(prev: FishStats, expGain: number): {
 export default function App() {
   const [stats, setStats] = useState<FishStats>(loadFishStats);
   const [crtEnabled, setCrtEnabled] = useState(true);
-  const [shellMode, setShellMode] = useState(false);
   const [bgmActive, setBgmActive] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -223,9 +221,6 @@ export default function App() {
         case 'd':
           setShowDonate(true);
           break;
-        case 't':
-          setShellMode((prev) => !prev);
-          break;
       }
     };
 
@@ -332,16 +327,8 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#0a0a14] font-sans">
-      
-      {/* Handheld Tamagotchi Shell / Fullscreen Switcher Wrapper */}
-      <TamagotchiShell
-        active={shellMode}
-        onButtonA={() => handleFeed('pellet')}
-        onButtonB={() => setShowMirror(true)}
-        onButtonC={() => handleClean()}
-      >
-        <div className="relative w-full h-full overflow-hidden">
+    <div className="relative w-full h-dvh overflow-hidden bg-[#0a0a14] font-sans">
+      <div className="relative w-full h-full overflow-hidden">
           
           {/* 3D WebGL Canvas Viewport */}
           <AquariumCanvas
@@ -367,8 +354,6 @@ export default function App() {
             onUpdateName={(name) => setStats((prev) => ({ ...prev, name }))}
             crtEnabled={crtEnabled}
             onToggleCrt={() => setCrtEnabled(!crtEnabled)}
-            shellMode={shellMode}
-            onToggleShell={() => setShellMode(!shellMode)}
             bgmActive={bgmActive}
             onToggleBgm={() => {
               const active = retroAudio.toggleBGM();
@@ -382,9 +367,9 @@ export default function App() {
             }}
           />
 
-          {/* Notification Toast Message (Retro Pixel Balloon) */}
+          {/* Notification Toast Message (Retro Pixel Banner) */}
           {toastMessage && (
-            <div className="absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-40 bg-[#1e1b4b]/95 border-2 border-[#facc15] text-[#fef08a] px-4 py-2 rounded-lg shadow-2xl font-['Press_Start_2P'] text-[9px] sm:text-[11px] max-w-[90vw] text-center animate-bounce select-none pointer-events-none">
+            <div className="arcade-panel absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-40 border-[#facc15] text-[#fef08a] px-4 py-2 font-mono font-bold text-xs sm:text-sm max-w-[90vw] text-center select-none pointer-events-none">
               {toastMessage}
             </div>
           )}
@@ -400,8 +385,7 @@ export default function App() {
             onOpenDonate={() => setShowDonate(true)}
           />
 
-        </div>
-      </TamagotchiShell>
+      </div>
 
       {/* Modals */}
       {showShop && (
