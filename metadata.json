@@ -1,0 +1,6 @@
+{
+  "name": "BETTA-GOTCHI 1996 - Ретро Тамагочи Рыбка Петушок",
+  "description": "Японский ретро-тамагочи 90-х и Dendy с реалистичной 3D рыбкой-петушком, уходом, магазином, мини-играми и донатом.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
