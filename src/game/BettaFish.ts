@@ -205,6 +205,7 @@ export class BettaFish {
     this.buildVipCrown();
     this.updateSkin(skinId);
 
+    this.fishRoot.scale.setScalar(0.56);
     this.group.add(this.fishRoot);
     this.fishRoot.add(this.vipCrownGroup);
     this.vipCrownGroup.visible = false;
@@ -1082,13 +1083,13 @@ export class BettaFish {
     this.wanderTimer -= delta;
     if (this.wanderTimer <= 0) {
       this.wanderTimer = 3.2 + Math.random() * 3.8;
-      const marginX = 0.75;
-      const marginY = 0.65;
+      const marginX = 0.65;
+      const marginY = 0.55;
       // Keep Z closer to 0 so the full broadside silhouette & flowing fins shine
       const zRange = this.isFlaring ? 0.35 : 0.9;
       this.targetPosition.set(
         THREE.MathUtils.randFloat(boundBox.minX + marginX, boundBox.maxX - marginX),
-        THREE.MathUtils.randFloat(boundBox.minY + marginY + 0.3, boundBox.maxY - marginY),
+        THREE.MathUtils.randFloat(boundBox.minY + marginY + 0.25, boundBox.maxY - marginY),
         THREE.MathUtils.randFloat(-zRange, zRange)
       );
     }

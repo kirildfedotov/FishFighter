@@ -884,13 +884,13 @@ export class AquariumScene {
   }
 
   private updateFood(delta: number) {
-    // Compute exact world mouth position along fish heading & pitch
+    // Compute exact world mouth position along fish heading & pitch (scaled to fishRoot=0.56)
     const heading = this.fish.group.rotation.y;
     const pitch = this.fish.group.rotation.z;
     _mouthPos.set(
-      Math.cos(heading) * Math.cos(pitch) * 0.85,
-      Math.sin(pitch) * 0.85 + 0.1,
-      -Math.sin(heading) * Math.cos(pitch) * 0.85
+      Math.cos(heading) * Math.cos(pitch) * 0.35,
+      Math.sin(pitch) * 0.35 + 0.05,
+      -Math.sin(heading) * Math.cos(pitch) * 0.35
     ).add(this.fish.currentPosition);
 
     const now = performance.now();
@@ -900,7 +900,7 @@ export class AquariumScene {
       p.mesh.position.addScaledVector(p.velocity, delta);
 
       const distToFish = p.mesh.position.distanceTo(_mouthPos);
-      if (distToFish < 0.55) {
+      if (distToFish < 0.42) {
         retroAudio.playChomp();
         this.fish.triggerGulp();
         this.createTapRipple(p.mesh.position, 0.3);

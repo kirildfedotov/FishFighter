@@ -12,6 +12,7 @@ import { DonateModal } from './components/DonateModal';
 import { MiniGameModal } from './components/MiniGameModal';
 import { MirrorModal } from './components/MirrorModal';
 import { TamagotchiShell } from './components/TamagotchiShell';
+import { SplashScreen } from './components/SplashScreen';
 import { loadFishStats, saveFishStats, FOOD_ITEMS, FISH_SKINS, AQUARIUM_THEMES } from './services/storage';
 import { FishStats, FoodType, FishColorPalette, AquariumThemeId, DonationTier } from './types';
 import { AquariumScene } from './game/AquariumScene';
@@ -45,6 +46,7 @@ export default function App() {
   const [shellMode, setShellMode] = useState(false);
   const [bgmActive, setBgmActive] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   // Modals
   const [showShop, setShowShop] = useState(false);
@@ -193,8 +195,8 @@ export default function App() {
         return;
       }
 
-      // Do not trigger global hotkeys while mini-game or modals are open
-      if (showMiniGame || showShop || showDonate || showMirror) return;
+      // Do not trigger global hotkeys while splash, mini-game or modals are open
+      if (showSplash || showMiniGame || showShop || showDonate || showMirror) return;
 
       switch (e.key.toLowerCase()) {
         case '1':
@@ -229,7 +231,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showMiniGame, showShop, showDonate, showMirror]);
+  }, [showSplash, showMiniGame, showShop, showDonate, showMirror]);
 
   // Tap glass
   const handleFishTapped = () => {
@@ -438,6 +440,20 @@ export default function App() {
             }
           }}
           onTrainingComplete={handleMirrorTrainingComplete}
+        />
+      )}
+
+      {/* Initial FishFighter Arcade Splash Screen */}
+      {showSplash && (
+        <SplashScreen
+          stats={stats}
+          onStart={(enableBgm) => {
+            setShowSplash(false);
+            if (enableBgm && !soundMuted) {
+              retroAudio.startBGM();
+              setBgmActive(true);
+            }
+          }}
         />
       )}
 
