@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Volume2, VolumeX, Music, Tv, Edit2, Check, Sparkles, Smartphone, Monitor } from 'lucide-react';
+import { Volume2, VolumeX, Music, Tv, Edit2, Check, Smartphone, Monitor } from 'lucide-react';
 import { FishStats } from '../types';
 import { retroAudio } from '../services/retroAudio';
 
@@ -44,7 +44,6 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
     setIsEditingName(false);
   };
 
-  // Helper for color coding stat bars
   const getStatColor = (val: number) => {
     if (val > 60) return 'bg-[#22c55e] border-[#15803d]';
     if (val > 30) return 'bg-[#eab308] border-[#a16207]';
@@ -52,17 +51,17 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
   };
 
   return (
-    <header className="relative z-20 w-full pointer-events-auto bg-[#0f111a]/90 border-b-4 border-[#312e81] shadow-2xl px-3 py-2 sm:px-5 sm:py-3 select-none">
+    <header className="relative z-20 w-full pointer-events-auto bg-[#0f111a]/92 border-b-4 border-[#312e81] shadow-2xl px-2.5 py-2 sm:px-5 sm:py-2.5 select-none">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 sm:gap-4">
         
         {/* Left: Fish Identity & Level */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           <div className="relative">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#1e1b4b] border-2 border-[#6366f1] rounded flex items-center justify-center shadow-inner">
-              <span className="text-xl sm:text-2xl filter drop-shadow">🐟</span>
+            <div className="w-9 h-9 sm:w-11 sm:h-11 bg-[#1e1b4b] border-2 border-[#6366f1] rounded flex items-center justify-center shadow-inner">
+              <span className="text-lg sm:text-2xl">🐟</span>
             </div>
             {stats.isVip && (
-              <span className="absolute -top-2 -right-2 text-xs bg-[#eab308] text-black font-bold px-1 rounded-sm border border-black shadow animate-bounce" title="VIP Золотой статус">
+              <span className="absolute -top-2 -right-2 text-[9px] bg-[#eab308] text-black font-black px-1 rounded-sm border border-black shadow" title="VIP Золотой статус">
                 VIP
               </span>
             )}
@@ -77,24 +76,35 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
                     value={tempName}
                     onChange={(e) => setTempName(e.target.value)}
                     maxLength={14}
-                    className="bg-[#181824] border border-[#6366f1] text-[#f8fafc] px-1.5 py-0.5 text-xs font-mono rounded outline-none w-28 sm:w-36"
+                    className="bg-[#181824] border border-[#6366f1] text-[#f8fafc] px-1.5 py-0.5 text-xs font-mono rounded outline-none w-24 sm:w-36"
                     autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && handleNameSave()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleNameSave();
+                      if (e.key === 'Escape') setIsEditingName(false);
+                    }}
                   />
                   <button
                     onClick={handleNameSave}
                     className="p-1 bg-[#22c55e] hover:bg-[#16a34a] text-black rounded text-xs transition"
+                    aria-label="Сохранить имя"
                   >
                     <Check className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 group cursor-pointer" onClick={() => setIsEditingName(true)}>
-                  <span className="font-['Press_Start_2P'] text-xs sm:text-sm text-[#facc15] tracking-wide">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 group cursor-pointer text-left"
+                  onClick={() => {
+                    setTempName(stats.name);
+                    setIsEditingName(true);
+                  }}
+                >
+                  <span className="font-['Press_Start_2P'] text-[11px] sm:text-sm text-[#facc15] tracking-wide">
                     {stats.name}
                   </span>
                   <Edit2 className="w-3 h-3 text-[#94a3b8] opacity-60 group-hover:opacity-100 transition" />
-                </div>
+                </button>
               )}
               <span className="text-[10px] font-['DotGothic16'] text-[#a5b4fc] hidden md:inline">
                 ベタゴッチ &apos;96
@@ -102,151 +112,172 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
             </div>
 
             {/* EXP Bar & Age */}
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] font-mono text-[#cbd5e1] bg-[#1e1b4b] px-1.5 py-0.2 rounded border border-[#4338ca]">
+            <div className="flex items-center gap-1.5 sm:gap-2 mt-1">
+              <span className="text-[10px] font-mono text-[#cbd5e1] bg-[#1e1b4b] px-1.5 py-0.2 rounded border border-[#4338ca] tabular-nums">
                 УР.{stats.level}
               </span>
-              <div className="w-16 sm:w-24 h-2 bg-[#1e1e2f] border border-[#4338ca] rounded-sm overflow-hidden">
+              <div className="w-14 sm:w-24 h-2 bg-[#1e1e2f] border border-[#4338ca] rounded-sm overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-[#4f46e5] to-[#06b6d4] transition-all duration-300"
                   style={{ width: `${Math.min(100, (stats.experience / stats.maxExperience) * 100)}%` }}
                 />
               </div>
-              <span className="text-[10px] font-mono text-[#94a3b8]">
+              <span className="text-[10px] font-mono text-[#94a3b8] tabular-nums">
                 {stats.ageDays} дн.
               </span>
             </div>
           </div>
         </div>
 
-        {/* Center: Vitality Gauges */}
+        {/* Center (Desktop): Vitality Gauges */}
         <div className="hidden lg:flex items-center gap-3 bg-[#131422] border-2 border-[#312e81] px-3 py-1.5 rounded shadow-inner">
-          {/* Hunger */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm" title="Сытость">🍱</span>
+          <div className="flex items-center gap-1.5" title="Сытость">
+            <span className="text-sm">🍱</span>
             <div className="w-16 h-2.5 bg-[#1f2037] border border-[#3730a3] rounded-xs overflow-hidden">
               <div
                 className={`h-full border-r ${getStatColor(stats.hunger)} transition-all duration-300`}
                 style={{ width: `${stats.hunger}%` }}
               />
             </div>
-            <span className="text-[10px] font-mono tabular-nums text-[#e2e8f0] w-6 text-right">
+            <span className="text-[10px] font-mono tabular-nums text-[#e2e8f0] w-7 text-right">
               {stats.hunger}%
             </span>
           </div>
 
           <div className="w-px h-4 bg-[#312e81]" />
 
-          {/* Cleanliness */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm" title="Чистота воды">🧼</span>
+          <div className="flex items-center gap-1.5" title="Чистота воды">
+            <span className="text-sm">🧼</span>
             <div className="w-16 h-2.5 bg-[#1f2037] border border-[#3730a3] rounded-xs overflow-hidden">
               <div
                 className={`h-full border-r ${getStatColor(stats.cleanliness)} transition-all duration-300`}
                 style={{ width: `${stats.cleanliness}%` }}
               />
             </div>
-            <span className="text-[10px] font-mono tabular-nums text-[#e2e8f0] w-6 text-right">
+            <span className="text-[10px] font-mono tabular-nums text-[#e2e8f0] w-7 text-right">
               {stats.cleanliness}%
             </span>
           </div>
 
           <div className="w-px h-4 bg-[#312e81]" />
 
-          {/* Happiness */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm" title="Настроение">💖</span>
+          <div className="flex items-center gap-1.5" title="Настроение">
+            <span className="text-sm">💖</span>
             <div className="w-16 h-2.5 bg-[#1f2037] border border-[#3730a3] rounded-xs overflow-hidden">
               <div
                 className={`h-full border-r ${getStatColor(stats.happiness)} transition-all duration-300`}
                 style={{ width: `${stats.happiness}%` }}
               />
             </div>
-            <span className="text-[10px] font-mono tabular-nums text-[#e2e8f0] w-6 text-right">
+            <span className="text-[10px] font-mono tabular-nums text-[#e2e8f0] w-7 text-right">
               {stats.happiness}%
             </span>
           </div>
         </div>
 
         {/* Right: Currency & Toggles */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Coins */}
-          <div className="flex items-center gap-1 bg-[#1a1b2e] border-2 border-[#b45309] px-2 py-1 rounded text-xs font-mono text-[#fde047] shadow">
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <div className="flex items-center gap-1 bg-[#1a1b2e] border-2 border-[#b45309] px-1.5 sm:px-2 py-1 rounded text-[11px] sm:text-xs font-mono text-[#fde047] shadow">
             <span>🪙</span>
             <span className="tabular-nums font-bold">{stats.coins}</span>
           </div>
 
-          {/* Pearls (VIP Currency) */}
-          <div className="flex items-center gap-1 bg-[#231535] border-2 border-[#a855f7] px-2 py-1 rounded text-xs font-mono text-[#f0abfc] shadow">
+          <div className="flex items-center gap-1 bg-[#231535] border-2 border-[#a855f7] px-1.5 sm:px-2 py-1 rounded text-[11px] sm:text-xs font-mono text-[#f0abfc] shadow">
             <span>🦪</span>
             <span className="tabular-nums font-bold">{stats.pearls}</span>
           </div>
 
-          {/* Audio BGM Button */}
           <button
             onClick={() => {
               onToggleBgm();
               retroAudio.playBlip(620, 0.05);
             }}
-            className={`p-1.5 sm:p-2 rounded border-2 transition ${
+            className={`p-1.5 sm:p-2 rounded border-2 transition cursor-pointer ${
               bgmActive
                 ? 'bg-[#4338ca] border-[#818cf8] text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]'
                 : 'bg-[#1e1b4b] border-[#312e81] text-[#94a3b8] hover:text-white'
             }`}
             title="Фоновая 8-бит музыка Dendy (BGM)"
+            aria-label="Фоновая музыка"
           >
-            <Music className="w-4 h-4" />
+            <Music className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
-          {/* Sound FX Mute Button */}
           <button
             onClick={() => {
               onToggleMute();
               retroAudio.playBlip(550, 0.05);
             }}
-            className={`p-1.5 sm:p-2 rounded border-2 transition ${
+            className={`p-1.5 sm:p-2 rounded border-2 transition cursor-pointer ${
               !soundMuted
                 ? 'bg-[#15803d] border-[#4ade80] text-white'
                 : 'bg-[#1e1e2f] border-[#475569] text-[#64748b]'
             }`}
             title="Звуковые эффекты (SFX)"
+            aria-label="Звуковые эффекты"
           >
-            {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            {soundMuted ? <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
           </button>
 
-          {/* Retro CRT Scanlines Toggle */}
           <button
             onClick={() => {
               onToggleCrt();
               retroAudio.playBlip(700, 0.06);
             }}
-            className={`p-1.5 sm:p-2 rounded border-2 transition hidden sm:inline-flex ${
+            className={`p-1.5 sm:p-2 rounded border-2 transition hidden sm:inline-flex cursor-pointer ${
               crtEnabled
                 ? 'bg-[#b91c1c] border-[#f87171] text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]'
                 : 'bg-[#1e1b4b] border-[#312e81] text-[#94a3b8] hover:text-white'
             }`}
             title="Ретро ЭЛТ-монитор и сканлайны (CRT 90s)"
+            aria-label="Режим CRT"
           >
             <Tv className="w-4 h-4" />
           </button>
 
-          {/* Shell / Fullscreen Switcher */}
           <button
             onClick={() => {
               onToggleShell();
               retroAudio.playBlip(800, 0.06);
             }}
-            className={`p-1.5 sm:p-2 rounded border-2 transition ${
+            className={`p-1.5 sm:p-2 rounded border-2 transition cursor-pointer ${
               shellMode
                 ? 'bg-[#0369a1] border-[#38bdf8] text-white shadow-[0_0_10px_rgba(56,189,248,0.5)]'
                 : 'bg-[#1e1b4b] border-[#312e81] text-[#94a3b8] hover:text-white'
             }`}
             title={shellMode ? 'Переключить в полный экран' : 'Корпус Тамагочи 1996'}
+            aria-label="Режим корпуса Тамагочи"
           >
-            {shellMode ? <Monitor className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
+            {shellMode ? <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
           </button>
         </div>
+      </div>
 
+      {/* Compact Mobile & Shell Vitality Gauges Row */}
+      <div className="lg:hidden mt-2 pt-1.5 border-t border-[#312e81]/70 grid grid-cols-3 gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs">🍱</span>
+          <div className="flex-1 h-2 bg-[#1f2037] border border-[#3730a3] rounded-xs overflow-hidden">
+            <div className={`h-full ${getStatColor(stats.hunger)} transition-all duration-300`} style={{ width: `${stats.hunger}%` }} />
+          </div>
+          <span className="text-[10px] font-mono tabular-nums text-[#e2e8f0]">{stats.hunger}%</span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs">🧼</span>
+          <div className="flex-1 h-2 bg-[#1f2037] border border-[#3730a3] rounded-xs overflow-hidden">
+            <div className={`h-full ${getStatColor(stats.cleanliness)} transition-all duration-300`} style={{ width: `${stats.cleanliness}%` }} />
+          </div>
+          <span className="text-[10px] font-mono tabular-nums text-[#e2e8f0]">{stats.cleanliness}%</span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs">💖</span>
+          <div className="flex-1 h-2 bg-[#1f2037] border border-[#3730a3] rounded-xs overflow-hidden">
+            <div className={`h-full ${getStatColor(stats.happiness)} transition-all duration-300`} style={{ width: `${stats.happiness}%` }} />
+          </div>
+          <span className="text-[10px] font-mono tabular-nums text-[#e2e8f0]">{stats.happiness}%</span>
+        </div>
       </div>
     </header>
   );

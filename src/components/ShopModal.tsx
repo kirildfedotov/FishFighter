@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { X, Check, Lock, Sparkles, Coins } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { FISH_SKINS, AQUARIUM_THEMES } from '../services/storage';
 import { FishStats, FishColorPalette, AquariumThemeId } from '../types';
 import { retroAudio } from '../services/retroAudio';
@@ -29,7 +29,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
   const [activeTab, setActiveTab] = useState<'skins' | 'themes'>('skins');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-xs select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 select-none">
       <div className="bg-[#121324] border-4 border-[#eab308] rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-[0_0_30px_rgba(234,179,8,0.3)] overflow-hidden">
         
         {/* Modal Header */}

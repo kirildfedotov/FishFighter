@@ -11,6 +11,7 @@ interface AquariumCanvasProps {
   skin: FishColorPalette;
   theme: AquariumThemeId;
   isVip: boolean;
+  cleanliness: number;
   onSceneReady?: (scene: AquariumScene) => void;
   onFishFed?: (nutrition: number) => void;
   onFishTapped?: () => void;
@@ -20,21 +21,32 @@ export const AquariumCanvas: React.FC<AquariumCanvasProps> = ({
   skin,
   theme,
   isVip,
+  cleanliness,
   onSceneReady,
   onFishFed,
   onFishTapped,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<AquariumScene | null>(null);
+  const onFishFedRef = useRef(onFishFed);
+  const onFishTappedRef = useRef(onFishTapped);
+
+  useEffect(() => {
+    onFishFedRef.current = onFishFed;
+  }, [onFishFed]);
+
+  useEffect(() => {
+    onFishTappedRef.current = onFishTapped;
+  }, [onFishTapped]);
 
   useEffect(() => {
     if (!mountRef.current) return;
 
-    // Initialize 3D Aquarium Scene once
     const scene = new AquariumScene(mountRef.current, skin, theme);
     scene.fish.setVip(isVip);
-    scene.onFishFed = onFishFed;
-    scene.onFishTapped = onFishTapped;
+    scene.setCleanliness(cleanliness);
+    scene.onFishFed = (nutrition) => onFishFedRef.current?.(nutrition);
+    scene.onFishTapped = () => onFishTappedRef.current?.();
     sceneRef.current = scene;
 
     if (onSceneReady) {
@@ -47,26 +59,29 @@ export const AquariumCanvas: React.FC<AquariumCanvasProps> = ({
     };
   }, []);
 
-  // Sync skin updates
   useEffect(() => {
     if (sceneRef.current && sceneRef.current.fish) {
       sceneRef.current.fish.updateSkin(skin);
     }
   }, [skin]);
 
-  // Sync theme updates
   useEffect(() => {
     if (sceneRef.current) {
       sceneRef.current.setTheme(theme);
     }
   }, [theme]);
 
-  // Sync VIP crown updates
   useEffect(() => {
     if (sceneRef.current && sceneRef.current.fish) {
       sceneRef.current.fish.setVip(isVip);
     }
   }, [isVip]);
+
+  useEffect(() => {
+    if (sceneRef.current) {
+      sceneRef.current.setCleanliness(cleanliness);
+    }
+  }, [cleanliness]);
 
   return (
     <div

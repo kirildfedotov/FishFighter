@@ -17,6 +17,28 @@ import { FishStats, FoodType, FishColorPalette, AquariumThemeId, DonationTier } 
 import { AquariumScene } from './game/AquariumScene';
 import { retroAudio } from './services/retroAudio';
 
+function applyExperience(prev: FishStats, expGain: number): {
+  experience: number;
+  level: number;
+  maxExperience: number;
+} {
+  let nextExp = prev.experience + expGain;
+  let nextLevel = prev.level;
+  let nextMaxExp = prev.maxExperience;
+
+  while (nextExp >= nextMaxExp) {
+    nextExp -= nextMaxExp;
+    nextLevel++;
+    nextMaxExp = Math.round(nextMaxExp * 1.5);
+  }
+
+  return {
+    experience: nextExp,
+    level: nextLevel,
+    maxExperience: nextMaxExp,
+  };
+}
+
 export default function App() {
   const [stats, setStats] = useState<FishStats>(loadFishStats);
   const [crtEnabled, setCrtEnabled] = useState(true);
@@ -35,11 +57,28 @@ export default function App() {
   const toastTimeoutRef = useRef<number | null>(null);
 
   const sceneRef = useRef<AquariumScene | null>(null);
+  const prevLevelRef = useRef(stats.level);
 
   // Auto-save stats to localStorage
   useEffect(() => {
     saveFishStats(stats);
   }, [stats]);
+
+  // Announce level-ups cleanly outside setState updaters
+  useEffect(() => {
+    if (stats.level > prevLevelRef.current) {
+      retroAudio.playFanfare();
+      showToast(`🎉 УРОВЕНЬ ПОВЫШЕН! Теперь уровень ${stats.level}!`);
+    }
+    prevLevelRef.current = stats.level;
+  }, [stats.level]);
+
+  // Cleanup toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   // Periodic stat gentle decay & level check
   useEffect(() => {
@@ -71,46 +110,6 @@ export default function App() {
     }, 3500);
   };
 
-  // Keyboard hotkeys
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      switch (e.key.toLowerCase()) {
-        case '1':
-        case 'f':
-          handleFeed('pellet');
-          break;
-        case '2':
-        case 'c':
-          handleClean();
-          break;
-        case '3':
-        case 'm':
-          setShowMirror(true);
-          break;
-        case '4':
-        case 'g':
-          setShowMiniGame(true);
-          break;
-        case '5':
-        case 's':
-          setShowShop(true);
-          break;
-        case '6':
-        case 'd':
-          setShowDonate(true);
-          break;
-        case 't':
-          setShellMode((prev) => !prev);
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [stats.coins]);
-
   // Action: Feed
   const handleFeed = (foodType: FoodType) => {
     const food = FOOD_ITEMS.find((f) => f.id === foodType) || FOOD_ITEMS[0];
@@ -137,25 +136,16 @@ export default function App() {
   // Scene Callback when fish catches pellet
   const handleFishFed = (nutrition: number) => {
     setStats((prev) => {
-      const expGain = 15;
-      const nextExp = prev.experience + expGain;
-      let nextLevel = prev.level;
-      let nextMaxExp = prev.maxExperience;
-
-      if (nextExp >= prev.maxExperience) {
-        nextLevel++;
-        nextMaxExp = Math.round(prev.maxExperience * 1.5);
-        retroAudio.playFanfare();
-        showToast(`🎉 УРОВЕНЬ ПОВЫШЕН! Теперь уровень ${nextLevel}!`);
-      }
+      const nextHunger = Math.min(100, prev.hunger + nutrition);
+      const nextHappy = Math.min(100, prev.happiness + 8);
+      const expResult = applyExperience(prev, 15);
 
       return {
         ...prev,
-        hunger: Math.min(100, prev.hunger + nutrition),
-        happiness: Math.min(100, prev.happiness + 8),
-        experience: nextExp % nextMaxExp,
-        level: nextLevel,
-        maxExperience: nextMaxExp,
+        hunger: nextHunger,
+        happiness: nextHappy,
+        health: Math.round((nextHunger + prev.cleanliness + nextHappy) / 3),
+        ...expResult,
         coins: prev.coins + 5,
       };
     });
@@ -164,26 +154,18 @@ export default function App() {
   // Action: Clean
   const handleClean = () => {
     retroAudio.playSplash();
+    sceneRef.current?.triggerCleanBurst();
     setStats((prev) => {
-      const expGain = 20;
-      const nextExp = prev.experience + expGain;
-      let nextLevel = prev.level;
-      let nextMaxExp = prev.maxExperience;
-
-      if (nextExp >= prev.maxExperience) {
-        nextLevel++;
-        nextMaxExp = Math.round(prev.maxExperience * 1.5);
-        retroAudio.playFanfare();
-        showToast(`🎉 УРОВЕНЬ ПОВЫШЕН! Уровень ${nextLevel}!`);
-      }
+      const nextClean = 100;
+      const nextHappy = Math.min(100, prev.happiness + 15);
+      const expResult = applyExperience(prev, 20);
 
       return {
         ...prev,
-        cleanliness: 100,
-        happiness: Math.min(100, prev.happiness + 15),
-        experience: nextExp % nextMaxExp,
-        level: nextLevel,
-        maxExperience: nextMaxExp,
+        cleanliness: nextClean,
+        happiness: nextHappy,
+        health: Math.round((prev.hunger + nextClean + nextHappy) / 3),
+        ...expResult,
         coins: prev.coins + 10,
         totalCleans: prev.totalCleans + 1,
         lastCleanedTimestamp: Date.now(),
@@ -192,6 +174,62 @@ export default function App() {
 
     showToast('Стекло начищено до блеска, вода кристальная! 🧼 (+10 🪙)');
   };
+
+  const handleFeedRef = useRef(handleFeed);
+  const handleCleanRef = useRef(handleClean);
+  handleFeedRef.current = handleFeed;
+  handleCleanRef.current = handleClean;
+
+  // Keyboard hotkeys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === 'Escape') {
+        setShowShop(false);
+        setShowDonate(false);
+        setShowMiniGame(false);
+        setShowMirror(false);
+        return;
+      }
+
+      // Do not trigger global hotkeys while mini-game or modals are open
+      if (showMiniGame || showShop || showDonate || showMirror) return;
+
+      switch (e.key.toLowerCase()) {
+        case '1':
+        case 'f':
+          handleFeedRef.current('pellet');
+          break;
+        case '2':
+        case 'c':
+          handleCleanRef.current();
+          break;
+        case '3':
+        case 'm':
+          setShowMirror(true);
+          break;
+        case '4':
+        case 'g':
+          setShowMiniGame(true);
+          break;
+        case '5':
+        case 's':
+          setShowShop(true);
+          break;
+        case '6':
+        case 'd':
+          setShowDonate(true);
+          break;
+        case 't':
+          setShellMode((prev) => !prev);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showMiniGame, showShop, showDonate, showMirror]);
 
   // Tap glass
   const handleFishTapped = () => {
@@ -275,14 +313,19 @@ export default function App() {
 
   // Mirror flare training complete
   const handleMirrorTrainingComplete = () => {
-    setStats((prev) => ({
-      ...prev,
-      happiness: 100,
-      energy: 100,
-      experience: prev.experience + 35,
-      coins: prev.coins + 25,
-      totalPlays: prev.totalPlays + 1,
-    }));
+    setStats((prev) => {
+      const nextHappy = 100;
+      const expResult = applyExperience(prev, 35);
+      return {
+        ...prev,
+        happiness: nextHappy,
+        energy: 100,
+        health: Math.round((prev.hunger + prev.cleanliness + nextHappy) / 3),
+        ...expResult,
+        coins: prev.coins + 25,
+        totalPlays: prev.totalPlays + 1,
+      };
+    });
     showToast('Петушок расправил плавники и полон царской энергии! 🪞 (+25 🪙)');
   };
 
@@ -303,6 +346,7 @@ export default function App() {
             skin={stats.skin}
             theme={stats.theme}
             isVip={stats.isVip}
+            cleanliness={stats.cleanliness}
             onSceneReady={(scene) => {
               sceneRef.current = scene;
             }}

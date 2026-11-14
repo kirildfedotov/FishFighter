@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Sparkles, HeartHandshake, ShoppingBag, Gamepad2, Waves, Eye } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sparkles, ShoppingBag, Gamepad2 } from 'lucide-react';
 import { FOOD_ITEMS } from '../services/storage';
 import { FoodType, FishStats } from '../types';
 import { retroAudio } from '../services/retroAudio';
@@ -33,7 +33,7 @@ export const ActionDock: React.FC<ActionDockProps> = ({
 
   return (
     <div
-      className={`fixed bottom-3 sm:bottom-5 left-1/2 -translate-x-1/2 z-30 w-[96%] max-w-[880px] pointer-events-auto transition-transform duration-300 ${
+      className={`absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 z-30 w-[96%] max-w-[880px] pointer-events-auto transition-transform duration-300 ${
         isCollapsed ? 'translate-y-[calc(100%-24px)]' : 'translate-y-0'
       }`}
     >
@@ -44,7 +44,7 @@ export const ActionDock: React.FC<ActionDockProps> = ({
             setIsCollapsed(!isCollapsed);
             retroAudio.playBlip(500, 0.04);
           }}
-          className="bg-[#181a2e] hover:bg-[#252849] border-t-2 border-x-2 border-[#4338ca] text-[#c7d2fe] px-4 py-1 rounded-t-lg text-xs font-mono flex items-center gap-1.5 shadow-lg transition"
+          className="bg-[#181a2e] hover:bg-[#252849] border-t-2 border-x-2 border-[#4338ca] text-[#c7d2fe] px-4 py-1 rounded-t-lg text-xs font-mono flex items-center gap-1.5 shadow-lg transition cursor-pointer"
         >
           {isCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           <span className="font-bold tracking-wider">
@@ -53,19 +53,19 @@ export const ActionDock: React.FC<ActionDockProps> = ({
         </button>
       </div>
 
-      {/* Main Glassmorphic Dock Container */}
+      {/* Main Dock Container */}
       <div className="bg-[#0f111a]/95 border-2 border-[#4338ca] rounded-xl shadow-2xl p-2 sm:p-3 relative">
         
         {/* Floating Food Submenu */}
         {showFoodMenu && !isCollapsed && (
-          <div className="absolute -top-[160px] left-2 sm:left-4 bg-[#14162b] border-2 border-[#f59e0b] rounded-lg p-2.5 shadow-2xl flex flex-col gap-2 z-40 min-w-[210px] sm:min-w-[260px]">
+          <div className="absolute bottom-full mb-2 left-1 sm:left-3 bg-[#14162b] border-2 border-[#f59e0b] rounded-lg p-2.5 shadow-2xl flex flex-col gap-2 z-40 min-w-[220px] sm:min-w-[260px]">
             <div className="flex items-center justify-between border-b border-[#312e81] pb-1">
               <span className="text-[11px] font-['Press_Start_2P'] text-[#fde047]">
                 ВЫБОР КОРМА
               </span>
               <button
                 onClick={() => setShowFoodMenu(false)}
-                className="text-[#94a3b8] hover:text-white text-xs px-1"
+                className="text-[#94a3b8] hover:text-white text-xs px-1 cursor-pointer"
               >
                 ✕
               </button>
@@ -118,7 +118,7 @@ export const ActionDock: React.FC<ActionDockProps> = ({
             }}
             className="flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-lg bg-gradient-to-b from-[#1e3a8a] to-[#172554] border-2 border-[#3b82f6] hover:border-[#60a5fa] text-white shadow hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer group"
           >
-            <span className="text-lg sm:text-2xl group-hover:animate-bounce">🍱</span>
+            <span className="text-lg sm:text-2xl group-hover:scale-110 transition">🍱</span>
             <span className="text-[10px] sm:text-xs font-mono font-bold mt-1 text-[#93c5fd]">
               Корм
             </span>
@@ -163,7 +163,7 @@ export const ActionDock: React.FC<ActionDockProps> = ({
             }}
             className="flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-lg bg-gradient-to-b from-[#991b1b] to-[#450a0a] border-2 border-[#ef4444] hover:border-[#f87171] text-white shadow hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer group"
           >
-            <Gamepad2 className="w-5 h-5 sm:w-6 sm:h-6 text-[#fca5a5] group-hover:animate-pulse" />
+            <Gamepad2 className="w-5 h-5 sm:w-6 sm:h-6 text-[#fca5a5] group-hover:scale-110 transition" />
             <span className="text-[10px] sm:text-xs font-mono font-bold mt-1 text-[#fecaca]">
               Денди
             </span>

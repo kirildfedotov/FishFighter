@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Play, RotateCcw, Trophy, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Zap } from 'lucide-react';
+import { X, Play, RotateCcw, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
 import { retroAudio } from '../services/retroAudio';
 
 interface MiniGameModalProps {
@@ -35,6 +35,22 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
   const [lives, setLives] = useState(3);
   const [earnedCoins, setEarnedCoins] = useState(0);
   const [earnedPearls, setEarnedPearls] = useState(0);
+
+  const onRewardRef = useRef(onReward);
+  const highScoreRef = useRef(highScore);
+  const isVipRef = useRef(isVip);
+
+  useEffect(() => {
+    onRewardRef.current = onReward;
+  }, [onReward]);
+
+  useEffect(() => {
+    highScoreRef.current = highScore;
+  }, [highScore]);
+
+  useEffect(() => {
+    isVipRef.current = isVip;
+  }, [isVip]);
 
   // Game internal mutable state
   const stateRef = useRef({
@@ -78,8 +94,20 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
     // Pixelated retro canvas rendering
     ctx.imageSmoothingEnabled = false;
 
+    const resetKeys = () => {
+      const k = stateRef.current.keys;
+      k.up = false;
+      k.down = false;
+      k.left = false;
+      k.right = false;
+      k.boost = false;
+    };
+
     // Keyboard handlers
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+        e.preventDefault();
+      }
       const k = stateRef.current.keys;
       if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') k.up = true;
       if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') k.down = true;
@@ -99,6 +127,7 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', resetKeys);
 
     let lastTime = performance.now();
 
@@ -168,14 +197,15 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
                 // Game Over!
                 s.gameActive = false;
                 setGameState('gameover');
-                const coinsMultiplier = isVip ? 2 : 1;
-                const coinsWon = Math.round(s.score * 1.5 * coinsMultiplier);
-                const pearlsWon = Math.floor(s.score / 60) * (isVip ? 2 : 1);
+                const vipBonus = isVipRef.current ? 2 : 1;
+                const coinsWon = Math.round(s.score * 1.5 * vipBonus);
+                const pearlsWon = Math.floor(s.score / 60) * vipBonus;
                 setEarnedCoins(coinsWon);
                 setEarnedPearls(pearlsWon);
-                onReward(coinsWon, pearlsWon);
+                onRewardRef.current(coinsWon, pearlsWon);
 
-                if (s.score > highScore) {
+                if (s.score > highScoreRef.current) {
+                  highScoreRef.current = s.score;
                   setHighScore(s.score);
                   localStorage.setItem('betta_minigame_hiscore', s.score.toString());
                 }
@@ -252,11 +282,11 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
       const py = s.playerY;
 
       // Fish body
-      ctx.fillStyle = isVip ? '#eab308' : '#3b82f6';
+      ctx.fillStyle = isVipRef.current ? '#eab308' : '#3b82f6';
       ctx.fillRect(px - 14, py - 7, 24, 14);
 
       // Tail fins
-      ctx.fillStyle = isVip ? '#f59e0b' : '#8b5cf6';
+      ctx.fillStyle = isVipRef.current ? '#f59e0b' : '#8b5cf6';
       ctx.beginPath();
       ctx.moveTo(px - 14, py);
       ctx.lineTo(px - 28, py - 14);
@@ -280,8 +310,9 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
       cancelAnimationFrame(stateRef.current.animId);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', resetKeys);
     };
-  }, [highScore, isVip, onReward]);
+  }, []);
 
   // Touch control helper
   const setKey = (key: 'up' | 'down' | 'left' | 'right' | 'boost', val: boolean) => {
@@ -289,7 +320,7 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-xs select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 select-none">
       <div className="bg-[#121326] border-4 border-[#ef4444] rounded-2xl w-full max-w-xl flex flex-col shadow-[0_0_35px_rgba(239,68,68,0.4)] overflow-hidden">
         
         {/* Header */}
@@ -380,7 +411,8 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
               onPointerDown={() => setKey('up', true)}
               onPointerUp={() => setKey('up', false)}
               onPointerLeave={() => setKey('up', false)}
-              className="bg-[#27273a] active:bg-[#4338ca] text-white rounded flex items-center justify-center"
+              onPointerCancel={() => setKey('up', false)}
+              className="bg-[#27273a] active:bg-[#4338ca] text-white rounded flex items-center justify-center touch-none"
             >
               <ArrowUp className="w-5 h-5" />
             </button>
@@ -389,7 +421,8 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
               onPointerDown={() => setKey('left', true)}
               onPointerUp={() => setKey('left', false)}
               onPointerLeave={() => setKey('left', false)}
-              className="bg-[#27273a] active:bg-[#4338ca] text-white rounded flex items-center justify-center"
+              onPointerCancel={() => setKey('left', false)}
+              className="bg-[#27273a] active:bg-[#4338ca] text-white rounded flex items-center justify-center touch-none"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -398,7 +431,8 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
               onPointerDown={() => setKey('right', true)}
               onPointerUp={() => setKey('right', false)}
               onPointerLeave={() => setKey('right', false)}
-              className="bg-[#27273a] active:bg-[#4338ca] text-white rounded flex items-center justify-center"
+              onPointerCancel={() => setKey('right', false)}
+              className="bg-[#27273a] active:bg-[#4338ca] text-white rounded flex items-center justify-center touch-none"
             >
               <ArrowRight className="w-5 h-5" />
             </button>
@@ -407,7 +441,8 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
               onPointerDown={() => setKey('down', true)}
               onPointerUp={() => setKey('down', false)}
               onPointerLeave={() => setKey('down', false)}
-              className="bg-[#27273a] active:bg-[#4338ca] text-white rounded flex items-center justify-center"
+              onPointerCancel={() => setKey('down', false)}
+              className="bg-[#27273a] active:bg-[#4338ca] text-white rounded flex items-center justify-center touch-none"
             >
               <ArrowDown className="w-5 h-5" />
             </button>
@@ -420,7 +455,8 @@ export const MiniGameModal: React.FC<MiniGameModalProps> = ({
               onPointerDown={() => setKey('boost', true)}
               onPointerUp={() => setKey('boost', false)}
               onPointerLeave={() => setKey('boost', false)}
-              className="w-16 h-16 rounded-full bg-[#ef4444] active:bg-[#dc2626] border-4 border-[#991b1b] shadow-lg flex items-center justify-center text-white font-['Press_Start_2P'] text-xs active:scale-95 transition"
+              onPointerCancel={() => setKey('boost', false)}
+              className="w-16 h-16 rounded-full bg-[#ef4444] active:bg-[#dc2626] border-4 border-[#991b1b] shadow-lg flex items-center justify-center text-white font-['Press_Start_2P'] text-xs active:scale-95 transition touch-none"
             >
               ТУРБО
             </button>

@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { X, Sparkles, Check, Copy, ExternalLink, Heart, Trophy, Crown, Coffee } from 'lucide-react';
+import { X, Sparkles, Check, Copy, Crown } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { DONATION_TIERS } from '../services/storage';
 import { DonationTier, FishStats } from '../types';
@@ -50,7 +50,7 @@ export const DonateModal: React.FC<DonateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-xs select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 select-none">
       <div className="bg-[#100d1e] border-4 border-[#c084fc] rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-[0_0_40px_rgba(192,132,252,0.35)] overflow-hidden">
         
         {/* Header */}
@@ -116,7 +116,7 @@ export const DonateModal: React.FC<DonateModalProps> = ({
             <>
               {/* Promo banner */}
               <div className="bg-[#1f113a] border-2 border-[#a855f7] rounded-xl p-3 flex items-center gap-3">
-                <Crown className="w-10 h-10 text-[#facc15] shrink-0 animate-pulse" />
+                <Crown className="w-10 h-10 text-[#facc15] shrink-0" />
                 <div className="text-xs">
                   <span className="font-bold text-[#fef08a] block">
                     Поддержите развитие проекта и получите эксклюзивный статус!
