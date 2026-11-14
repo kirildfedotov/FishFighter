@@ -178,7 +178,7 @@ export default function App() {
     setShowMirror(false);
     setFighterMode(true);
     retroAudio.playFlare();
-    sceneRef.current?.enterFighterMode(rival.skin, Boolean(rival.isVip));
+    sceneRef.current?.enterFighterMode(rival.skin, Boolean(rival.isVip), true);
   };
 
   const exitFighterArena = () => {
@@ -192,15 +192,30 @@ export default function App() {
     sceneRef.current?.setOpponentSkin(rival.skin, Boolean(rival.isVip));
   };
 
-  const handleFighterMatchEnd = (won: boolean, coins: number, pearls: number, exp: number) => {
+  const handleFighterMatchEnd = (
+    won: boolean,
+    coins: number,
+    pearls: number,
+    exp: number,
+    rivalId: string,
+    ratingDelta: number
+  ) => {
     setStats((prev) => {
       const expResult = applyExperience(prev, exp);
+      const prevDefeated = Array.isArray(prev.defeatedRivals) ? prev.defeatedRivals : [];
+      const nextDefeated = won && !prevDefeated.includes(rivalId) ? [...prevDefeated, rivalId] : prevDefeated;
+      const nextRating = Math.max(800, (prev.fighterRating ?? 1000) + ratingDelta);
+
       return {
         ...prev,
         coins: prev.coins + coins,
         pearls: prev.pearls + pearls,
         happiness: Math.min(100, prev.happiness + (won ? 15 : 5)),
         totalPlays: prev.totalPlays + 1,
+        fighterWins: (prev.fighterWins ?? 0) + (won ? 1 : 0),
+        fighterLosses: (prev.fighterLosses ?? 0) + (won ? 0 : 1),
+        fighterRating: nextRating,
+        defeatedRivals: nextDefeated,
         ...expResult,
       };
     });
@@ -408,6 +423,7 @@ export default function App() {
             stats={stats}
             rivalIndex={rivalIndex}
             onSelectRival={handleSelectRival}
+            onFightStateChange={(isFighting) => sceneRef.current?.setFighterActive(isFighting)}
             onMove={(actor, kind) => sceneRef.current?.playFighterMove(actor, kind)}
             onMatchEnd={handleFighterMatchEnd}
             onExit={exitFighterArena}

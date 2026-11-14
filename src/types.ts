@@ -88,6 +88,11 @@ export interface FishStats {
   lastCleanedTimestamp: number;
   lastCareTimestamp: number;
   createdTimestamp: number;
+  modelVersion?: number;
+  fighterWins?: number;
+  fighterLosses?: number;
+  fighterRating?: number;
+  defeatedRivals?: string[];
 }
 
 export interface DonationTier {

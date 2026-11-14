@@ -15,6 +15,8 @@ export interface FoodPellet {
   velocity: THREE.Vector3;
   type: string;
   nutrition: number;
+  swayPhase: number;
+  surfaceWait: number;
   settledAt?: number;
 }
 
@@ -1652,7 +1654,7 @@ export class AquariumScene {
     retroAudio.playChomp();
 
     for (let i = 0; i < count; i++) {
-      const pelletGeom = new THREE.SphereGeometry(type === 'golden_flake' ? 0.055 : 0.042, 8, 8);
+      const pelletGeom = new THREE.SphereGeometry(type === 'golden_flake' ? 0.056 : 0.044, 8, 8);
       const color = type === 'golden_flake' ? 0xfacc15 : type === 'bloodworm' ? 0xef4444 : 0xf97316;
       const pelletMat = new THREE.MeshStandardMaterial({
         color,
@@ -1662,76 +1664,127 @@ export class AquariumScene {
 
       const mesh = new THREE.Mesh(pelletGeom, pelletMat);
       mesh.position.set(
-        (Math.random() - 0.5) * 2.0,
-        this.tankBounds.maxY - 0.12,
-        (Math.random() - 0.5) * 1.1
+        (Math.random() - 0.5) * 1.9,
+        this.tankBounds.maxY - 0.12 - Math.random() * 0.08,
+        (Math.random() - 0.5) * 0.9
       );
       this.scene.add(mesh);
+      this.createTapRipple(mesh.position, 0.32);
 
       this.foodPellets.push({
         mesh,
         velocity: new THREE.Vector3(
-          (Math.random() - 0.5) * 0.16,
-          -(0.26 + Math.random() * 0.24),
-          (Math.random() - 0.5) * 0.16
+          (Math.random() - 0.5) * 0.14,
+          -(0.18 + Math.random() * 0.16),
+          (Math.random() - 0.5) * 0.14
         ),
         type,
         nutrition,
+        swayPhase: Math.random() * Math.PI * 2,
+        surfaceWait: 0.25 + i * 0.16,
       });
     }
 
-    if (this.foodPellets.length > 0) {
-      this.fish.swimTo(this.foodPellets[0].mesh.position, true);
+    if (!this.fighterMode && this.foodPellets.length > 0) {
+      // Swim eagerly toward nearest pellet immediately
+      let bestPellet = this.foodPellets[0];
+      let bestDistSq = bestPellet.mesh.position.distanceToSquared(this.fish.currentPosition);
+      for (let i = 1; i < this.foodPellets.length; i++) {
+        const dSq = this.foodPellets[i].mesh.position.distanceToSquared(this.fish.currentPosition);
+        if (dSq < bestDistSq) {
+          bestDistSq = dSq;
+          bestPellet = this.foodPellets[i];
+        }
+      }
+      this.fish.swimTo(bestPellet.mesh.position, true);
     }
   }
 
-  private updateFood(delta: number) {
-    // Compute exact world mouth position along fish heading & pitch (scaled to fishRoot=0.56)
+  private updateFood(delta: number, time: number) {
+    if (this.foodPellets.length === 0) {
+      this.fish.prepareBite(false);
+      return;
+    }
+
+    // Compute exact world snout position along fish heading & pitch (fishRoot scale = 0.62, snout = 0.90)
     const heading = this.fish.group.rotation.y;
     const pitch = this.fish.group.rotation.z;
+    const mouthReach = 0.52;
     _mouthPos.set(
-      Math.cos(heading) * Math.cos(pitch) * 0.35,
-      Math.sin(pitch) * 0.35 + 0.05,
-      -Math.sin(heading) * Math.cos(pitch) * 0.35
+      Math.cos(heading) * Math.cos(pitch) * mouthReach,
+      Math.sin(pitch) * mouthReach + 0.03,
+      -Math.sin(heading) * Math.cos(pitch) * mouthReach
     ).add(this.fish.currentPosition);
 
     const now = performance.now();
+    let nearestPellet: FoodPellet | null = null;
+    let nearestDistSq = Infinity;
 
     for (let i = this.foodPellets.length - 1; i >= 0; i--) {
       const p = this.foodPellets[i];
-      p.mesh.position.addScaledVector(p.velocity, delta);
 
-      const distToFish = p.mesh.position.distanceTo(_mouthPos);
-      if (distToFish < 0.42) {
-        retroAudio.playChomp();
-        this.fish.triggerGulp();
-        this.createTapRipple(p.mesh.position, 0.3);
-        this.scene.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        (p.mesh.material as THREE.Material).dispose();
-        this.foodPellets.splice(i, 1);
+      if (p.surfaceWait > 0) {
+        p.surfaceWait = Math.max(0, p.surfaceWait - delta);
+        // Gentle surface bobbing before sinking
+        p.mesh.position.x += p.velocity.x * 0.35 * delta;
+        p.mesh.position.y += Math.sin(time * 4.5 + p.swayPhase) * 0.04 * delta;
+      } else if (!p.settledAt) {
+        p.mesh.position.x += (p.velocity.x + Math.sin(time * 2.4 + p.swayPhase) * 0.09) * delta;
+        p.mesh.position.y += p.velocity.y * delta;
+        p.mesh.position.z += (p.velocity.z + Math.cos(time * 2.1 + p.swayPhase) * 0.06) * delta;
+        p.mesh.position.x = THREE.MathUtils.clamp(p.mesh.position.x, this.tankBounds.minX + 0.45, this.tankBounds.maxX - 0.45);
+        p.mesh.position.z = THREE.MathUtils.clamp(p.mesh.position.z, -1.1, 1.1);
+      }
 
-        // Swim to next food pellet if any remain
-        if (this.foodPellets.length > 0) {
-          this.fish.swimTo(this.foodPellets[0].mesh.position, true);
+      if (!this.fighterMode) {
+        const distSq = p.mesh.position.distanceToSquared(_mouthPos);
+        if (distSq < 0.48 * 0.48) {
+          retroAudio.playChomp();
+          this.fish.triggerGulp();
+          this.createTapRipple(p.mesh.position, 0.38);
+          this.scene.remove(p.mesh);
+          p.mesh.geometry.dispose();
+          (p.mesh.material as THREE.Material).dispose();
+          this.foodPellets.splice(i, 1);
+
+          if (this.onFishFed) {
+            this.onFishFed(p.nutrition);
+          }
+          continue;
         }
 
-        if (this.onFishFed) {
-          this.onFishFed(p.nutrition);
+        if (distSq < nearestDistSq) {
+          nearestDistSq = distSq;
+          nearestPellet = p;
         }
-        continue;
       }
 
       if (p.mesh.position.y <= this.tankBounds.minY + 0.08) {
         p.velocity.set(0, 0, 0);
         if (!p.settledAt) p.settledAt = now;
-        if (now - p.settledAt > 4500) {
+        if (now - p.settledAt > 5500) {
           this.scene.remove(p.mesh);
           p.mesh.geometry.dispose();
           (p.mesh.material as THREE.Material).dispose();
           this.foodPellets.splice(i, 1);
+          if (nearestPellet === p) {
+            nearestPellet = null;
+          }
         }
       }
+    }
+
+    // Active continuous tracking & bite anticipation toward the nearest pellet
+    if (!this.fighterMode && nearestPellet) {
+      this.fish.prepareBite(nearestDistSq < 0.85 * 0.85);
+      if (
+        !this.fish.isExcited ||
+        this.fish.targetPosition.distanceToSquared(nearestPellet.mesh.position) > 0.05
+      ) {
+        this.fish.swimTo(nearestPellet.mesh.position, true);
+      }
+    } else {
+      this.fish.prepareBite(false);
     }
   }
 
@@ -1825,7 +1878,7 @@ export class AquariumScene {
     this.buildThemeDecorations(themeId);
   }
 
-  public enterFighterMode(opponentSkin: FishColorPalette, opponentVip = false) {
+  public enterFighterMode(opponentSkin: FishColorPalette, opponentVip = false, previewOnly = true) {
     this.fighterMode = true;
     this.opponentFish.updateSkin(opponentSkin);
     this.opponentFish.setVip(opponentVip);
@@ -1836,14 +1889,28 @@ export class AquariumScene {
     this.opponentFish.currentPosition.copy(rivalStance);
     this.opponentFish.group.position.copy(rivalStance);
 
-    this.fish.enterCombat(playerStance, 0);
-    this.opponentFish.enterCombat(rivalStance, Math.PI);
+    this.fish.enterCombat(playerStance, 0, previewOnly);
+    this.opponentFish.enterCombat(rivalStance, Math.PI, previewOnly);
     this.createTapRipple(new THREE.Vector3(this.arenaCenterX, 0.25, 0.2), 1.6);
+  }
+
+  public setFighterActive(active: boolean) {
+    this.fish.setCombatPreview(!active);
+    this.opponentFish.setCombatPreview(!active);
+    if (active) {
+      this.createTapRipple(new THREE.Vector3(this.arenaCenterX, 0.25, 0.2), 1.8);
+    }
   }
 
   public exitFighterMode() {
     this.fighterMode = false;
     this.opponentFish.group.visible = false;
+    // Place fish at the right side of the main aquarium facing left so it visibly swims home alongside camera slide
+    if (this.fish.currentPosition.x > 3.6) {
+      this.fish.currentPosition.set(3.35, 0.24, 0.18);
+      this.fish.group.position.copy(this.fish.currentPosition);
+      this.fish.setHeading(Math.PI);
+    }
     this.fish.exitCombat(new THREE.Vector3(0, 0.18, 0.2));
   }
 
@@ -1895,7 +1962,7 @@ export class AquariumScene {
       this.updateCaustics(time);
       this.updateBubbles(delta, time);
       this.updatePlankton(delta);
-      this.updateFood(delta);
+      this.updateFood(delta, time);
       this.updateRipples(delta);
       this.updateThemeProps(delta, time);
 

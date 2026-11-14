@@ -20,13 +20,13 @@ export const FISH_SKINS: Record<string, FishSkin> = {
   },
   royal_blue: {
     id: 'royal_blue',
-    name: 'Королевский Синий',
-    jpName: 'ロイヤルブルー',
-    description: 'Классический сапфировый петушок с переливами индиго и фиолетового.',
+    name: 'Королевский Халфмун',
+    jpName: 'ロイヤルブルー・ハーフムーン',
+    description: 'Металлические сапфировые чешуйки, угольно-чёрная голова и пышный халфмун-хвост с серебристо-белой каймой.',
     primaryColor: '#1d4ed8',
-    secondaryColor: '#7c3aed',
-    bellyColor: '#38bdf8',
-    fresnelColor: '#ec4899',
+    secondaryColor: '#60a5fa',
+    bellyColor: '#111827',
+    fresnelColor: '#dbeafe',
     priceCoins: 0,
     pricePearls: 0,
   },
@@ -263,12 +263,12 @@ export const INITIAL_FISH_STATS: FishStats = {
   energy: 90,
   health: 100,
   isSleeping: false,
-  skin: 'tropical_paradise',
+  skin: 'royal_blue',
   theme: 'tokyo_neon_96',
   coins: 150,
   pearls: 10,
   isVip: false,
-  unlockedSkins: ['tropical_paradise', 'royal_blue'],
+  unlockedSkins: ['royal_blue', 'tropical_paradise'],
   unlockedThemes: ['tokyo_neon_96'],
   unlockedAccessories: [],
   totalFeedings: 0,
@@ -278,6 +278,11 @@ export const INITIAL_FISH_STATS: FishStats = {
   lastCleanedTimestamp: Date.now(),
   lastCareTimestamp: Date.now(),
   createdTimestamp: Date.now(),
+  modelVersion: 2,
+  fighterWins: 0,
+  fighterLosses: 0,
+  fighterRating: 1000,
+  defeatedRivals: [],
 };
 
 export function loadFishStats(): FishStats {
@@ -306,15 +311,24 @@ export function loadFishStats(): FishStats {
     const updatedHealth = Math.round((updatedHunger + updatedClean + updatedHappy) / 3);
 
     const prevUnlocked: FishColorPalette[] = Array.isArray(parsed.unlockedSkins) ? parsed.unlockedSkins : ['royal_blue'];
-    const hasTropical = prevUnlocked.includes('tropical_paradise');
-    const updatedUnlocked: FishColorPalette[] = hasTropical ? prevUnlocked : ['tropical_paradise', ...prevUnlocked];
-    const updatedSkin: FishColorPalette = hasTropical ? (parsed.skin || 'tropical_paradise') : 'tropical_paradise';
+    const withRoyal = prevUnlocked.includes('royal_blue') ? prevUnlocked : (['royal_blue', ...prevUnlocked] as FishColorPalette[]);
+    const updatedUnlocked: FishColorPalette[] = withRoyal.includes('tropical_paradise')
+      ? withRoyal
+      : ([...withRoyal, 'tropical_paradise'] as FishColorPalette[]);
+
+    const isV2 = parsed.modelVersion === 2;
+    const updatedSkin: FishColorPalette = isV2 ? (parsed.skin || 'royal_blue') : 'royal_blue';
 
     return {
       ...INITIAL_FISH_STATS,
       ...parsed,
       skin: updatedSkin,
       unlockedSkins: updatedUnlocked,
+      modelVersion: 2,
+      fighterWins: typeof parsed.fighterWins === 'number' ? parsed.fighterWins : 0,
+      fighterLosses: typeof parsed.fighterLosses === 'number' ? parsed.fighterLosses : 0,
+      fighterRating: typeof parsed.fighterRating === 'number' ? parsed.fighterRating : 1000,
+      defeatedRivals: Array.isArray(parsed.defeatedRivals) ? parsed.defeatedRivals : [],
       ageDays: totalAgeDays,
       hunger: updatedHunger,
       cleanliness: updatedClean,

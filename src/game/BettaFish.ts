@@ -35,13 +35,13 @@ const BETTA_PALETTES: Record<FishColorPalette, PaletteColors> = {
   },
   royal_blue: {
     bodyBase: '#1e3a8a',
-    bodyHighlight: '#3b82f6',
-    headMask: '#090d26',
-    finBase: '#1d4ed8',
-    finMid: '#6d28d9',
-    finRim: '#f472b6',
-    iridescenceTint: '#38bdf8',
-    eyeIris: '#60a5fa',
+    bodyHighlight: '#60a5fa',
+    headMask: '#11131a',
+    finBase: '#172554',
+    finMid: '#2563eb',
+    finRim: '#dbeafe',
+    iridescenceTint: '#93c5fd',
+    eyeIris: '#1e293b',
     gillMembrane: '#7f1d1d',
     pelvicTip: '#f8fafc',
   },
@@ -165,6 +165,7 @@ export class BettaFish {
 
   // Materials & Procedural Textures
   private bodyMaterial!: THREE.MeshPhysicalMaterial;
+  private headMaterial!: THREE.MeshPhysicalMaterial;
   private caudalMaterial!: THREE.MeshPhysicalMaterial;
   private sailMaterial!: THREE.MeshPhysicalMaterial;
   private pectoralMaterial!: THREE.MeshPhysicalMaterial;
@@ -172,14 +173,19 @@ export class BettaFish {
   private irisMaterial!: THREE.MeshStandardMaterial;
   private corneaMaterial!: THREE.MeshPhysicalMaterial;
   private pupilMaterial!: THREE.MeshStandardMaterial;
+  private eyeSparkMaterial!: THREE.MeshBasicMaterial;
   private gillMembraneMaterial!: THREE.MeshStandardMaterial;
   private goldMaterial!: THREE.MeshStandardMaterial;
 
   private bodyTexture!: THREE.CanvasTexture;
   private scaleNormalTexture!: THREE.CanvasTexture;
   private caudalTexture!: THREE.CanvasTexture;
+  private caudalNormalTexture!: THREE.CanvasTexture;
   private sailTexture!: THREE.CanvasTexture;
+  private sailNormalTexture!: THREE.CanvasTexture;
   private pectoralTexture!: THREE.CanvasTexture;
+  private pelvicTexture!: THREE.CanvasTexture;
+  private irisTexture!: THREE.CanvasTexture;
 
   // Kinematics & State
   public targetPosition: THREE.Vector3 = new THREE.Vector3(0, 0.15, 0);
@@ -187,6 +193,10 @@ export class BettaFish {
   public velocity: THREE.Vector3 = new THREE.Vector3(0.4, 0, 0);
   private swimSpeed: number = 0.78;
   private wanderTimer: number = 0;
+  private hoverPauseTimer: number = 0;
+  private isHovering: boolean = false;
+  private returningHome: boolean = false;
+  private currentSwimSpeed: number = 0;
   private animTime: number = 0;
   private headingAngle: number = 0;
   private pitchAngle: number = 0;
@@ -196,13 +206,16 @@ export class BettaFish {
   public isFlaring: boolean = false;
   public flareIntensity: number = 0;
   public isExcited: boolean = false;
+  private excitedTimer: number = 0;
   public isSleeping: boolean = false;
   private mouthGulpTimer: number = 0;
+  private mouthAnticipate: number = 0;
   public currentSkinId: FishColorPalette = 'royal_blue';
   private isSoftwareGl: boolean = false;
 
   // PvP Combat Choreography states
   public combatMode: boolean = false;
+  private combatPreview: boolean = false;
   private combatHomePos: THREE.Vector3 = new THREE.Vector3();
   private combatFacing: number = 0;
   private combatDashOffset: THREE.Vector3 = new THREE.Vector3();
@@ -229,7 +242,7 @@ export class BettaFish {
     this.buildCombatShield();
     this.updateSkin(skinId);
 
-    this.fishRoot.scale.setScalar(0.56);
+    this.fishRoot.scale.setScalar(0.62);
     this.group.add(this.fishRoot);
     this.fishRoot.add(this.vipCrownGroup);
     this.vipCrownGroup.visible = false;
@@ -253,100 +266,247 @@ export class BettaFish {
   }
 
   private initTextures(palette: PaletteColors) {
-    // 1. Body Scale Albedo Texture (1024x512: Head Mask -> Iridescent Scales -> Belly Gradient)
+    // 1. Body Scale Albedo Texture (1024x512: Smooth Velvet Head -> Interlocking Diamond Scales -> Belly Gradient)
     const bCanvas = document.createElement('canvas');
     bCanvas.width = 1024;
     bCanvas.height = 512;
-    const bCtx = bCanvas.getContext('2d')!;
-    this.paintBodySkin(bCtx, palette);
+    this.paintBodySkin(bCanvas.getContext('2d')!, palette);
 
     this.bodyTexture = new THREE.CanvasTexture(bCanvas);
     this.bodyTexture.colorSpace = THREE.SRGBColorSpace;
     this.bodyTexture.wrapS = THREE.ClampToEdgeWrapping;
     this.bodyTexture.wrapT = THREE.RepeatWrapping;
 
-    // 2. Matching Cycloid Scale Normal Map
+    // 2. High-Resolution Matching Cycloid Scale Normal Map (1024x512, 48x22 interlocking shields)
     const nCanvas = document.createElement('canvas');
-    nCanvas.width = 512;
-    nCanvas.height = 256;
-    const nCtx = nCanvas.getContext('2d')!;
-    nCtx.fillStyle = 'rgb(128, 128, 255)';
-    nCtx.fillRect(0, 0, 512, 256);
-
-    const rows = 20;
-    const cols = 42;
-    const cw = 512 / cols;
-    const ch = 256 / rows;
-    for (let c = 0; c < cols; c++) {
-      // Smooth skin on head region (u < 0.22)
-      if (c / cols < 0.22) continue;
-      for (let r = 0; r < rows; r++) {
-        const cx = c * cw;
-        const cy = (r + (c % 2 === 0 ? 0 : 0.5)) * ch;
-        const grad = nCtx.createRadialGradient(cx + cw * 0.2, cy, 0, cx, cy, ch * 0.65);
-        grad.addColorStop(0, 'rgb(165, 138, 255)');
-        grad.addColorStop(0.65, 'rgb(128, 128, 255)');
-        grad.addColorStop(1, 'rgb(95, 118, 240)');
-        nCtx.fillStyle = grad;
-        nCtx.beginPath();
-        nCtx.arc(cx, cy, ch * 0.62, 0, Math.PI * 2);
-        nCtx.fill();
-      }
-    }
+    nCanvas.width = 1024;
+    nCanvas.height = 512;
+    this.paintScaleNormalMap(nCanvas.getContext('2d')!);
     this.scaleNormalTexture = new THREE.CanvasTexture(nCanvas);
     this.scaleNormalTexture.wrapS = THREE.ClampToEdgeWrapping;
     this.scaleNormalTexture.wrapT = THREE.RepeatWrapping;
 
-    // 3. Polar-mapped Halfmoon Caudal Fin Texture (u = radial 0..1, v = angular 0..1)
+    // 3. Polar-mapped Halfmoon Caudal Fin Texture & Branching Ray Normal Map (1024x1024)
     const cCanvas = document.createElement('canvas');
-    cCanvas.width = 512;
-    cCanvas.height = 512;
-    const cCtx = cCanvas.getContext('2d')!;
-    this.paintCaudalTexture(cCtx, palette);
+    cCanvas.width = 1024;
+    cCanvas.height = 1024;
+    this.paintCaudalTexture(cCanvas.getContext('2d')!, palette);
 
     this.caudalTexture = new THREE.CanvasTexture(cCanvas);
     this.caudalTexture.colorSpace = THREE.SRGBColorSpace;
     this.caudalTexture.wrapS = THREE.ClampToEdgeWrapping;
     this.caudalTexture.wrapT = THREE.ClampToEdgeWrapping;
 
-    // 4. Dorsal & Anal Sail Fin Texture (u = anterior->posterior 0..1, v = base->tip 0..1)
+    const cnCanvas = document.createElement('canvas');
+    cnCanvas.width = 1024;
+    cnCanvas.height = 1024;
+    this.paintCaudalNormalMap(cnCanvas.getContext('2d')!);
+    this.caudalNormalTexture = new THREE.CanvasTexture(cnCanvas);
+    this.caudalNormalTexture.wrapS = THREE.ClampToEdgeWrapping;
+    this.caudalNormalTexture.wrapT = THREE.ClampToEdgeWrapping;
+
+    // 4. Dorsal & Anal Sail Fin Texture & Sweeping Ray Normal Map (1024x1024)
     const sCanvas = document.createElement('canvas');
-    sCanvas.width = 512;
-    sCanvas.height = 512;
-    const sCtx = sCanvas.getContext('2d')!;
-    this.paintSailTexture(sCtx, palette);
+    sCanvas.width = 1024;
+    sCanvas.height = 1024;
+    this.paintSailTexture(sCanvas.getContext('2d')!, palette);
 
     this.sailTexture = new THREE.CanvasTexture(sCanvas);
     this.sailTexture.colorSpace = THREE.SRGBColorSpace;
     this.sailTexture.wrapS = THREE.ClampToEdgeWrapping;
     this.sailTexture.wrapT = THREE.ClampToEdgeWrapping;
 
-    // 5. Delicate Translucent Pectoral Fin Texture
+    const snCanvas = document.createElement('canvas');
+    snCanvas.width = 1024;
+    snCanvas.height = 1024;
+    this.paintSailNormalMap(snCanvas.getContext('2d')!);
+    this.sailNormalTexture = new THREE.CanvasTexture(snCanvas);
+    this.sailNormalTexture.wrapS = THREE.ClampToEdgeWrapping;
+    this.sailNormalTexture.wrapT = THREE.ClampToEdgeWrapping;
+
+    // 5. Delicate Translucent Pectoral Fin Texture (512x512)
     const pCanvas = document.createElement('canvas');
-    pCanvas.width = 256;
-    pCanvas.height = 256;
-    const pCtx = pCanvas.getContext('2d')!;
-    this.paintPectoralTexture(pCtx, palette);
+    pCanvas.width = 512;
+    pCanvas.height = 512;
+    this.paintPectoralTexture(pCanvas.getContext('2d')!, palette);
 
     this.pectoralTexture = new THREE.CanvasTexture(pCanvas);
     this.pectoralTexture.colorSpace = THREE.SRGBColorSpace;
+
+    // 6. Sculpted Scimitar Pelvic Fin Texture (256x512)
+    const pvCanvas = document.createElement('canvas');
+    pvCanvas.width = 256;
+    pvCanvas.height = 512;
+    this.paintPelvicTexture(pvCanvas.getContext('2d')!, palette);
+
+    this.pelvicTexture = new THREE.CanvasTexture(pvCanvas);
+    this.pelvicTexture.colorSpace = THREE.SRGBColorSpace;
+
+    // 7. Organic Radial Iris Texture
+    const iCanvas = document.createElement('canvas');
+    iCanvas.width = 128;
+    iCanvas.height = 128;
+    this.paintIrisTexture(iCanvas.getContext('2d')!, palette);
+    this.irisTexture = new THREE.CanvasTexture(iCanvas);
+    this.irisTexture.colorSpace = THREE.SRGBColorSpace;
+  }
+
+  private paintIrisTexture(ctx: CanvasRenderingContext2D, p: PaletteColors) {
+    ctx.fillStyle = '#0b0e17';
+    ctx.fillRect(0, 0, 128, 128);
+    const rg = ctx.createRadialGradient(64, 64, 16, 64, 64, 62);
+    rg.addColorStop(0.0, '#04060c');
+    rg.addColorStop(0.32, p.eyeIris);
+    rg.addColorStop(0.68, p.bodyHighlight);
+    rg.addColorStop(0.92, '#111827');
+    rg.addColorStop(1.0, '#05070e');
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.arc(64, 64, 62, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Fine iris striation fibers
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 32; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(64 + Math.cos(a) * 22, 64 + Math.sin(a) * 22);
+      ctx.lineTo(64 + Math.cos(a) * 52, 64 + Math.sin(a) * 52);
+      ctx.stroke();
+    }
+  }
+
+  private paintScaleNormalMap(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = 'rgb(128, 128, 255)';
+    ctx.fillRect(0, 0, 1024, 512);
+
+    const rows = 22;
+    const cols = 48;
+    const cw = 1024 / cols;
+    const ch = 512 / rows;
+    for (let c = 0; c < cols; c++) {
+      const u = c / cols;
+      for (let r = 0; r < rows; r++) {
+        const cy = (r + (c % 2 === 0 ? 0 : 0.5)) * ch;
+        const vNorm = cy / 512;
+        const flankFactor = Math.abs(Math.cos(vNorm * Math.PI * 2));
+        const gillBoundaryU = 0.215 + flankFactor * 0.055;
+        if (u < gillBoundaryU) continue;
+
+        const cx = c * cw;
+        const grad = ctx.createRadialGradient(cx + cw * 0.22, cy - ch * 0.08, 1, cx, cy, ch * 0.68);
+        grad.addColorStop(0.0, 'rgb(184, 148, 255)');
+        grad.addColorStop(0.58, 'rgb(128, 128, 255)');
+        grad.addColorStop(0.88, 'rgb(82, 108, 228)');
+        grad.addColorStop(1.0, 'rgb(128, 128, 255)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, cw * 0.68, ch * 0.64, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  private paintCaudalNormalMap(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = 'rgb(128, 128, 255)';
+    ctx.fillRect(0, 0, 1024, 1024);
+
+    // Soft macro velvet silk pleats across the fan
+    for (let y = 0; y < 1024; y += 2) {
+      const t = y / 1024;
+      const pleatSlope = Math.cos(t * Math.PI * 7) * 26 + Math.cos(t * Math.PI * 15) * 14;
+      const gVal = Math.round(THREE.MathUtils.clamp(128 + pleatSlope, 78, 178));
+      ctx.fillStyle = `rgb(128, ${gVal}, 250)`;
+      ctx.fillRect(0, y, 1024, 2);
+    }
+
+    // Dichotomous primary -> secondary -> tertiary branching ray relief
+    const numPrimary = 28;
+    const step = 1024 / numPrimary;
+    const drawRayNormal = (x0: number, y0: number, x1: number, y1: number, width: number) => {
+      ctx.strokeStyle = 'rgba(154, 144, 255, 0.72)';
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo((x0 + x1) * 0.5, y0 * 0.72 + y1 * 0.28, x1, y1);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(104, 112, 232, 0.52)';
+      ctx.lineWidth = width * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0 + width * 0.45);
+      ctx.quadraticCurveTo((x0 + x1) * 0.5, y0 * 0.72 + y1 * 0.28 + width * 0.45, x1, y1 + width * 0.45);
+      ctx.stroke();
+    };
+
+    for (let i = 0; i < numPrimary; i++) {
+      const y = (i + 0.5) * step;
+      const curveBend = (i / numPrimary - 0.5) * 28;
+      drawRayNormal(0, y, 310, y + curveBend * 0.25, 6.0);
+      const y1a = y + curveBend * 0.25 - 6.5;
+      const y1b = y + curveBend * 0.25 + 6.5;
+      drawRayNormal(310, y + curveBend * 0.25, 650, y1a + curveBend * 0.35, 3.8);
+      drawRayNormal(310, y + curveBend * 0.25, 650, y1b + curveBend * 0.35, 3.8);
+
+      const y2a = y1a + curveBend * 0.35;
+      const y2b = y1b + curveBend * 0.35;
+      drawRayNormal(650, y2a, 1020, y2a - 4.0 + curveBend * 0.4, 2.2);
+      drawRayNormal(650, y2a, 1020, y2a + 4.0 + curveBend * 0.4, 2.2);
+      drawRayNormal(650, y2b, 1020, y2b - 4.0 + curveBend * 0.4, 2.2);
+      drawRayNormal(650, y2b, 1020, y2b + 4.0 + curveBend * 0.4, 2.2);
+    }
+  }
+
+  private paintSailNormalMap(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = 'rgb(128, 128, 255)';
+    ctx.fillRect(0, 0, 1024, 1024);
+    const numRays = 32;
+    const step = 1024 / numRays;
+    for (let i = 0; i < numRays; i++) {
+      const baseX = (i + 0.5) * step;
+      const tipX = Math.min(1016, baseX + 125 + (i / numRays) * 65);
+      const midX = (baseX + tipX) * 0.5 + 16;
+
+      ctx.strokeStyle = 'rgba(164, 134, 255, 0.72)';
+      ctx.lineWidth = 4.5;
+      ctx.beginPath();
+      ctx.moveTo(baseX, 1024);
+      ctx.quadraticCurveTo(baseX + 35, 560, midX, 460);
+      ctx.stroke();
+
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(midX, 460);
+      ctx.lineTo(Math.max(4, tipX - 10), 0);
+      ctx.moveTo(midX, 460);
+      ctx.lineTo(Math.min(1020, tipX + 12), 0);
+      ctx.stroke();
+    }
   }
 
   private paintBodySkin(ctx: CanvasRenderingContext2D, p: PaletteColors, skinId: FishColorPalette = this.currentSkinId) {
     const isTropical = skinId === 'tropical_paradise';
+    const isRoyal = skinId === 'royal_blue';
 
-    // U runs 0 (snout) -> 1 (peduncle). V runs around circumference.
     const baseGrad = ctx.createLinearGradient(0, 0, 1024, 0);
     if (isTropical) {
       baseGrad.addColorStop(0.0, p.headMask);
-      baseGrad.addColorStop(0.16, '#0f766e');
-      baseGrad.addColorStop(0.32, '#06b6d4');
-      baseGrad.addColorStop(0.62, '#10b981');
+      baseGrad.addColorStop(0.18, '#0f766e');
+      baseGrad.addColorStop(0.34, '#06b6d4');
+      baseGrad.addColorStop(0.64, '#10b981');
       baseGrad.addColorStop(0.84, '#f97316');
       baseGrad.addColorStop(1.0, '#ec4899');
+    } else if (isRoyal) {
+      baseGrad.addColorStop(0.0, p.headMask);
+      baseGrad.addColorStop(0.22, p.headMask);
+      baseGrad.addColorStop(0.32, '#1e3a8a');
+      baseGrad.addColorStop(0.75, '#1d4ed8');
+      baseGrad.addColorStop(1.0, '#172554');
     } else {
       baseGrad.addColorStop(0.0, p.headMask);
-      baseGrad.addColorStop(0.18, p.headMask);
+      baseGrad.addColorStop(0.2, p.headMask);
       baseGrad.addColorStop(0.32, p.bodyBase);
       baseGrad.addColorStop(0.85, p.bodyBase);
       baseGrad.addColorStop(1.0, p.finBase);
@@ -354,7 +514,6 @@ export class BettaFish {
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, 1024, 512);
 
-    // Tropical Reef Koi Saddle Patches (coral-orange, hibiscus magenta & sunlit gold splashes)
     if (isTropical) {
       const patches = [
         { x: 380, y: 125, rx: 120, ry: 58, color: 'rgba(249, 115, 22, 0.72)' },
@@ -377,32 +536,71 @@ export class BettaFish {
       }
     }
 
-    // Subtle lateral iridescent sheen band
+    // Anatomical dorsal-to-ventral depth shading
     const flankGrad = ctx.createLinearGradient(0, 0, 0, 512);
-    flankGrad.addColorStop(0.0, 'rgba(0,0,0,0.22)'); // belly/ventral
-    flankGrad.addColorStop(0.25, 'rgba(255,255,255,0.1)'); // flank
-    flankGrad.addColorStop(0.5, isTropical ? 'rgba(6, 78, 59, 0.25)' : 'rgba(0,0,0,0.35)'); // dorsal spine
-    flankGrad.addColorStop(0.75, 'rgba(255,255,255,0.1)'); // opposite flank
-    flankGrad.addColorStop(1.0, 'rgba(0,0,0,0.22)');
+    flankGrad.addColorStop(0.0, 'rgba(255,255,255,0.06)');
+    flankGrad.addColorStop(0.25, isRoyal ? 'rgba(191, 219, 254, 0.34)' : 'rgba(255,255,255,0.16)');
+    flankGrad.addColorStop(0.5, 'rgba(255,255,255,0.04)');
+    flankGrad.addColorStop(0.75, 'rgba(2, 4, 14, 0.42)');
+    flankGrad.addColorStop(1.0, 'rgba(255,255,255,0.06)');
     ctx.fillStyle = flankGrad;
     ctx.fillRect(0, 0, 1024, 512);
 
-    // Overlapping metallic dragon/cycloid scales from shoulder (u=0.22) to peduncle (u=0.98)
-    const rows = 20;
-    const cols = 42;
+    // Smooth dark matte head mask following anatomical gill-cover crescent
+    ctx.fillStyle = p.headMask;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let y = 0; y <= 512; y += 8) {
+      const vNorm = y / 512;
+      const flankFactor = Math.abs(Math.cos(vNorm * Math.PI * 2));
+      const gillX = (0.215 + flankFactor * 0.055) * 1024;
+      ctx.lineTo(gillX, y);
+    }
+    ctx.lineTo(0, 512);
+    ctx.closePath();
+    ctx.fill();
+
+    // Subtle dark opercular margin groove
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    for (let y = 0; y <= 512; y += 8) {
+      const vNorm = y / 512;
+      const flankFactor = Math.abs(Math.cos(vNorm * Math.PI * 2));
+      const gillX = (0.22 + flankFactor * 0.055) * 1024;
+      if (y === 0) ctx.moveTo(gillX, y);
+      else ctx.lineTo(gillX, y);
+    }
+    ctx.stroke();
+
+    // Subtle iridescent cheek sheen dots on head
+    ctx.fillStyle = this.hexToRgba(p.bodyHighlight, 0.14);
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.ellipse(185 - i * 8, 225 + (i % 2) * 52, 12, 8, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Crisp Overlapping Cycloid/Diamond Betta Scales (48x22)
+    const rows = 22;
+    const cols = 48;
     const cw = 1024 / cols;
     const ch = 512 / rows;
 
     for (let c = 0; c < cols; c++) {
       const u = c / cols;
-      if (u < 0.21) continue;
-      const scaleAlpha = Math.min(1, (u - 0.21) / 0.14);
-
       for (let r = 0; r < rows; r++) {
         const cx = c * cw;
         const cy = (r + (c % 2 === 0 ? 0 : 0.5)) * ch;
+        const vNorm = cy / 512;
+        const flankFactor = Math.abs(Math.cos(vNorm * Math.PI * 2));
+        const gillBoundaryU = 0.215 + flankFactor * 0.055;
+        if (u < gillBoundaryU) continue;
 
-        // Pick sparkling jewel-tone accents on tropical fish
+        const scaleAlpha = Math.min(1, (u - gillBoundaryU) / 0.07);
+        const dorsalSheen = Math.max(0, 1 - Math.abs(vNorm - 0.25) / 0.24);
+        const bellyShade = Math.max(0, 1 - Math.abs(vNorm - 0.75) / 0.2);
+
         const tropicalShift = (c * 7 + r * 11) % 9;
         const centerColor = isTropical
           ? tropicalShift === 0
@@ -412,26 +610,36 @@ export class BettaFish {
             : tropicalShift === 6
             ? '#fb7185'
             : p.bodyHighlight
+          : isRoyal && dorsalSheen > 0.3 && u < 0.65
+          ? '#dbeafe'
           : p.bodyHighlight;
 
-        // Scale metallic center highlight
         ctx.save();
-        ctx.globalAlpha = (isTropical ? 0.78 : 0.72) * scaleAlpha;
-        const sg = ctx.createRadialGradient(cx - cw * 0.1, cy, 1, cx, cy, ch * 0.58);
-        sg.addColorStop(0, centerColor);
-        sg.addColorStop(0.65, isTropical && u > 0.72 ? p.finBase : p.bodyBase);
-        sg.addColorStop(1, 'rgba(0,0,0,0.48)');
+        ctx.globalAlpha = (isTropical ? 0.8 : isRoyal ? 0.92 : 0.82) * scaleAlpha * (1 - bellyShade * 0.28);
+        const sg = ctx.createRadialGradient(cx - cw * 0.22, cy - ch * 0.06, 0.5, cx, cy, ch * 0.64);
+        sg.addColorStop(0.0, centerColor);
+        sg.addColorStop(0.45, isTropical && u > 0.72 ? p.finBase : p.bodyBase);
+        sg.addColorStop(0.88, isRoyal ? '#091438' : 'rgba(4, 8, 22, 0.88)');
+        sg.addColorStop(1.0, 'rgba(2, 4, 12, 0.92)');
         ctx.fillStyle = sg;
         ctx.beginPath();
-        ctx.arc(cx, cy, ch * 0.56, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, cw * 0.66, ch * 0.6, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Crisp dark pocket rim
-        ctx.globalAlpha = 0.4 * scaleAlpha;
-        ctx.strokeStyle = '#05050a';
-        ctx.lineWidth = 1.6;
+        // Crisp dark pocket rim around each scale
+        ctx.globalAlpha = (isRoyal ? 0.74 : 0.52) * scaleAlpha;
+        ctx.strokeStyle = '#02040b';
+        ctx.lineWidth = 1.9;
         ctx.beginPath();
-        ctx.arc(cx, cy, ch * 0.54, -Math.PI * 0.45, Math.PI * 0.45);
+        ctx.ellipse(cx, cy, cw * 0.63, ch * 0.57, 0, -Math.PI * 0.5, Math.PI * 0.5);
+        ctx.stroke();
+
+        // Delicate metallic rim catchlight on leading upper edge
+        ctx.globalAlpha = (isRoyal ? 0.42 : 0.28) * scaleAlpha * (0.4 + dorsalSheen * 0.6);
+        ctx.strokeStyle = centerColor;
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.ellipse(cx - 1.5, cy - 1, cw * 0.46, ch * 0.42, 0, Math.PI * 0.75, Math.PI * 1.45);
         ctx.stroke();
         ctx.restore();
       }
@@ -440,40 +648,47 @@ export class BettaFish {
 
   private paintCaudalTexture(ctx: CanvasRenderingContext2D, p: PaletteColors, skinId: FishColorPalette = this.currentSkinId) {
     const isTropical = skinId === 'tropical_paradise';
-    ctx.clearRect(0, 0, 512, 512);
+    const isRoyal = skinId === 'royal_blue';
+    ctx.clearRect(0, 0, 1024, 1024);
 
-    // U (x: 0..512) = radial distance from root (0) to outer tip (512)
-    // V (y: 0..512) = angular span across fan
-    const grad = ctx.createLinearGradient(0, 0, 512, 0);
+    // Rich silky fan base gradient with soft feathered outer alpha
+    const grad = ctx.createLinearGradient(0, 0, 1024, 0);
     if (isTropical) {
-      grad.addColorStop(0.0, 'rgba(6, 182, 212, 0.98)');   // Electric lagoon turquoise root
-      grad.addColorStop(0.22, 'rgba(249, 115, 22, 0.94)'); // Coral tangerine mid-inner
-      grad.addColorStop(0.55, 'rgba(236, 72, 153, 0.86)'); // Hibiscus magenta middle
-      grad.addColorStop(0.82, 'rgba(250, 204, 21, 0.76)'); // Sunburst gold outer band
-      grad.addColorStop(0.95, 'rgba(103, 232, 249, 0.5)'); // Aqua translucent lace trim
+      grad.addColorStop(0.0, 'rgba(6, 182, 212, 0.98)');
+      grad.addColorStop(0.24, 'rgba(249, 115, 22, 0.94)');
+      grad.addColorStop(0.56, 'rgba(236, 72, 153, 0.86)');
+      grad.addColorStop(0.84, 'rgba(250, 204, 21, 0.76)');
+      grad.addColorStop(0.95, 'rgba(103, 232, 249, 0.52)');
       grad.addColorStop(1.0, 'rgba(254, 240, 138, 0.08)');
+    } else if (isRoyal) {
+      grad.addColorStop(0.0, 'rgba(17, 29, 74, 0.99)');
+      grad.addColorStop(0.18, 'rgba(29, 78, 216, 0.96)');
+      grad.addColorStop(0.54, 'rgba(37, 99, 235, 0.91)');
+      grad.addColorStop(0.73, 'rgba(15, 23, 48, 0.89)');
+      grad.addColorStop(0.84, 'rgba(147, 197, 253, 0.83)');
+      grad.addColorStop(0.95, 'rgba(226, 238, 255, 0.72)');
+      grad.addColorStop(1.0, 'rgba(248, 250, 252, 0.16)');
     } else {
       grad.addColorStop(0.0, this.hexToRgba(p.bodyBase, 0.98));
-      grad.addColorStop(0.18, this.hexToRgba(p.finBase, 0.92));
-      grad.addColorStop(0.55, this.hexToRgba(p.finMid, 0.82));
-      grad.addColorStop(0.82, this.hexToRgba(p.finRim, 0.72));
-      grad.addColorStop(0.95, this.hexToRgba(p.finRim, 0.45));
-      grad.addColorStop(1.0, this.hexToRgba(p.finRim, 0.05));
+      grad.addColorStop(0.18, this.hexToRgba(p.finBase, 0.94));
+      grad.addColorStop(0.56, this.hexToRgba(p.finMid, 0.86));
+      grad.addColorStop(0.84, this.hexToRgba(p.finRim, 0.76));
+      grad.addColorStop(0.96, this.hexToRgba(p.finRim, 0.52));
+      grad.addColorStop(1.0, this.hexToRgba(p.finRim, 0.12));
     }
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 512);
+    ctx.fillRect(0, 0, 1024, 1024);
 
-    // Tropical Koi spotting along fin fan
     if (isTropical) {
       const spots = [
-        { x: 110, y: 120, r: 34, c: 'rgba(253, 224, 71, 0.32)' },
-        { x: 170, y: 260, r: 42, c: 'rgba(34, 211, 238, 0.28)' },
-        { x: 130, y: 390, r: 36, c: 'rgba(253, 224, 71, 0.32)' },
-        { x: 295, y: 175, r: 30, c: 'rgba(251, 113, 133, 0.3)' },
-        { x: 280, y: 345, r: 32, c: 'rgba(52, 211, 153, 0.26)' },
+        { x: 220, y: 240, r: 68, c: 'rgba(253, 224, 71, 0.32)' },
+        { x: 340, y: 520, r: 84, c: 'rgba(34, 211, 238, 0.28)' },
+        { x: 260, y: 780, r: 72, c: 'rgba(253, 224, 71, 0.32)' },
+        { x: 590, y: 350, r: 60, c: 'rgba(251, 113, 133, 0.3)' },
+        { x: 560, y: 690, r: 64, c: 'rgba(52, 211, 153, 0.26)' },
       ];
       for (const sp of spots) {
-        const sg = ctx.createRadialGradient(sp.x, sp.y, 2, sp.x, sp.y, sp.r);
+        const sg = ctx.createRadialGradient(sp.x, sp.y, 4, sp.x, sp.y, sp.r);
         sg.addColorStop(0, sp.c);
         sg.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = sg;
@@ -483,136 +698,197 @@ export class BettaFish {
       }
     }
 
-    // Delicate butterfly banding / marbled veining
-    ctx.fillStyle = this.hexToRgba(p.bodyHighlight, 0.14);
-    for (let band = 0; band < 3; band++) {
-      const bx = 130 + band * 105;
-      ctx.beginPath();
-      for (let y = 0; y <= 512; y += 16) {
-        const x = bx + Math.sin(y * 0.05 + band) * 14;
-        if (y === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.lineTo(bx + 28, 512);
-      ctx.lineTo(bx + 28, 0);
-      ctx.closePath();
-      ctx.fill();
+    if (isRoyal) {
+      const lobeShade = ctx.createLinearGradient(0, 0, 0, 1024);
+      lobeShade.addColorStop(0.0, 'rgba(6, 10, 24, 0.54)');
+      lobeShade.addColorStop(0.2, 'rgba(6, 10, 24, 0.0)');
+      lobeShade.addColorStop(0.8, 'rgba(6, 10, 24, 0.0)');
+      lobeShade.addColorStop(1.0, 'rgba(6, 10, 24, 0.48)');
+      ctx.fillStyle = lobeShade;
+      ctx.fillRect(380, 0, 480, 1024);
     }
 
-    // Bifurcating cartilaginous fin rays (Lepidotrichia) along U!
-    const numRays = 42;
-    for (let i = 0; i < numRays; i++) {
-      const y = (i + 0.5) * (512 / numRays);
-
-      // Thick primary ray from base to bifurcation point
-      ctx.strokeStyle = this.hexToRgba(isTropical ? '#67e8f9' : p.bodyHighlight, 0.62);
-      ctx.lineWidth = 2.4;
+    // Dichotomous Branching Fin Rays (28 primary -> 56 secondary -> 112 fine outer rays)
+    const numPrimary = 28;
+    const step = 1024 / numPrimary;
+    const strokeCurved = (x0: number, y0: number, x1: number, y1: number, color: string, width: number) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(170, y);
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo((x0 + x1) * 0.5, y0 * 0.72 + y1 * 0.28, x1, y1);
       ctx.stroke();
+    };
+
+    const rayPrimaryCol = this.hexToRgba(isTropical ? '#67e8f9' : p.bodyHighlight, isRoyal ? 0.78 : 0.65);
+    const rayMidCol = this.hexToRgba(p.finRim, isRoyal ? 0.62 : 0.5);
+    const rayTipCol = this.hexToRgba(isTropical ? '#fef08a' : p.finRim, isRoyal ? 0.8 : 0.52);
+
+    for (let i = 0; i < numPrimary; i++) {
+      const y = (i + 0.5) * step;
+      const curveBend = (i / numPrimary - 0.5) * 28;
+      const midY = y + curveBend * 0.25;
+
+      // Primary root ray
+      strokeCurved(0, y, 310, midY, rayPrimaryCol, 3.6);
+
+      // Inter-ray dark shadow groove
+      strokeCurved(18, y + step * 0.5, 995, y + step * 0.5 + curveBend * 0.9, isRoyal ? 'rgba(4, 7, 22, 0.36)' : 'rgba(0, 0, 10, 0.22)', 2.1);
 
       // Secondary split
-      ctx.strokeStyle = this.hexToRgba(p.finRim, 0.48);
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(170, y);
-      ctx.lineTo(350, y - 3.2);
-      ctx.moveTo(170, y);
-      ctx.lineTo(350, y + 3.2);
-      ctx.stroke();
+      const s1 = midY - 6.5 + curveBend * 0.35;
+      const s2 = midY + 6.5 + curveBend * 0.35;
+      strokeCurved(310, midY, 650, s1, rayMidCol, 2.2);
+      strokeCurved(310, midY, 650, s2, rayMidCol, 2.2);
 
-      // Tertiary delicate split to edge
-      ctx.strokeStyle = this.hexToRgba(isTropical ? '#fef08a' : p.finRim, 0.38);
-      ctx.lineWidth = 0.9;
-      ctx.beginPath();
-      ctx.moveTo(350, y - 3.2);
-      ctx.lineTo(506, y - 5.0);
-      ctx.moveTo(350, y - 3.2);
-      ctx.lineTo(506, y - 1.4);
-      ctx.moveTo(350, y + 3.2);
-      ctx.lineTo(506, y + 1.4);
-      ctx.moveTo(350, y + 3.2);
-      ctx.lineTo(506, y + 5.0);
-      ctx.stroke();
+      // Tertiary outer split
+      strokeCurved(650, s1, 1018, s1 - 4.0 + curveBend * 0.4, rayTipCol, 1.35);
+      strokeCurved(650, s1, 1018, s1 + 4.0 + curveBend * 0.4, rayTipCol, 1.35);
+      strokeCurved(650, s2, 1018, s2 - 4.0 + curveBend * 0.4, rayTipCol, 1.35);
+      strokeCurved(650, s2, 1018, s2 + 4.0 + curveBend * 0.4, rayTipCol, 1.35);
     }
 
-    // Subtle dark inter-ray shadows for silk pleat depth
-    for (let i = 0; i < numRays; i++) {
-      const y = i * (512 / numRays);
-      ctx.strokeStyle = 'rgba(0, 0, 10, 0.16)';
-      ctx.lineWidth = 1.5;
+    // Fine scalloped lacy outer margin alpha cutout matching 112 ray tips
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const scallops = numPrimary * 4;
+    for (let i = 0; i < scallops; i++) {
+      const y = (i + 0.5) * (1024 / scallops);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
       ctx.beginPath();
-      ctx.moveTo(20, y);
-      ctx.lineTo(490, y);
-      ctx.stroke();
+      ctx.arc(1024, y, 4.4, 0, Math.PI * 2);
+      ctx.fill();
     }
+    ctx.restore();
   }
 
   private paintSailTexture(ctx: CanvasRenderingContext2D, p: PaletteColors, skinId: FishColorPalette = this.currentSkinId) {
     const isTropical = skinId === 'tropical_paradise';
-    ctx.clearRect(0, 0, 512, 512);
+    const isRoyal = skinId === 'royal_blue';
+    ctx.clearRect(0, 0, 1024, 1024);
 
-    const grad = ctx.createLinearGradient(0, 512, 0, 0);
+    const grad = ctx.createLinearGradient(0, 1024, 0, 0);
     if (isTropical) {
       grad.addColorStop(0.0, 'rgba(8, 145, 178, 0.98)');
       grad.addColorStop(0.24, 'rgba(249, 115, 22, 0.92)');
       grad.addColorStop(0.58, 'rgba(236, 72, 153, 0.84)');
-      grad.addColorStop(0.86, 'rgba(250, 204, 21, 0.7)');
-      grad.addColorStop(1.0, 'rgba(103, 232, 249, 0.16)');
+      grad.addColorStop(0.86, 'rgba(250, 204, 21, 0.72)');
+      grad.addColorStop(1.0, 'rgba(103, 232, 249, 0.14)');
+    } else if (isRoyal) {
+      grad.addColorStop(0.0, 'rgba(18, 30, 74, 0.99)');
+      grad.addColorStop(0.28, 'rgba(29, 78, 216, 0.95)');
+      grad.addColorStop(0.66, 'rgba(37, 99, 235, 0.89)');
+      grad.addColorStop(0.8, 'rgba(15, 23, 42, 0.88)');
+      grad.addColorStop(0.89, 'rgba(148, 163, 184, 0.8)');
+      grad.addColorStop(0.97, 'rgba(226, 232, 240, 0.7)');
+      grad.addColorStop(1.0, 'rgba(248, 250, 252, 0.18)');
     } else {
       grad.addColorStop(0.0, this.hexToRgba(p.bodyBase, 0.98));
-      grad.addColorStop(0.22, this.hexToRgba(p.finBase, 0.92));
-      grad.addColorStop(0.6, this.hexToRgba(p.finMid, 0.8));
-      grad.addColorStop(0.88, this.hexToRgba(p.finRim, 0.65));
-      grad.addColorStop(1.0, this.hexToRgba(p.finRim, 0.12));
+      grad.addColorStop(0.22, this.hexToRgba(p.finBase, 0.94));
+      grad.addColorStop(0.6, this.hexToRgba(p.finMid, 0.85));
+      grad.addColorStop(0.88, this.hexToRgba(p.finRim, 0.72));
+      grad.addColorStop(1.0, this.hexToRgba(p.finRim, 0.16));
     }
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 512);
+    ctx.fillRect(0, 0, 1024, 1024);
 
-    // Sweeping curved fin rays fanning backward (increasing X as Y goes from base 512 to tip 0)
-    const numRays = 28;
+    // Sweeping branching sail rays
+    const numRays = 32;
+    const step = 1024 / numRays;
     for (let i = 0; i < numRays; i++) {
-      const baseX = (i / numRays) * 440 + 10;
-      const tipX = Math.min(508, baseX + 65 + (i / numRays) * 35);
+      const baseX = (i + 0.5) * step * 0.88 + 12;
+      const tipX = Math.min(1012, baseX + 125 + (i / numRays) * 65);
+      const midX = (baseX + tipX) * 0.5 + 16;
 
-      ctx.strokeStyle = this.hexToRgba(isTropical ? '#67e8f9' : p.bodyHighlight, 0.56);
-      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = this.hexToRgba(isTropical ? '#67e8f9' : p.bodyHighlight, isRoyal ? 0.72 : 0.6);
+      ctx.lineWidth = 3.2;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(baseX, 512);
-      ctx.quadraticCurveTo(baseX + 20, 270, tipX, 8);
+      ctx.moveTo(baseX, 1024);
+      ctx.quadraticCurveTo(baseX + 35, 560, midX, 460);
       ctx.stroke();
 
-      // Secondary ray highlight
-      ctx.strokeStyle = this.hexToRgba(p.finRim, 0.42);
-      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = this.hexToRgba(p.finRim, isRoyal ? 0.64 : 0.5);
+      ctx.lineWidth = 1.85;
       ctx.beginPath();
-      ctx.moveTo((baseX + tipX) * 0.5, 256);
-      ctx.lineTo(Math.min(510, tipX + 8), 8);
+      ctx.moveTo(midX, 460);
+      ctx.lineTo(Math.max(4, tipX - 10), 4);
+      ctx.moveTo(midX, 460);
+      ctx.lineTo(Math.min(1020, tipX + 12), 4);
+      ctx.stroke();
+
+      ctx.strokeStyle = isRoyal ? 'rgba(4, 7, 22, 0.32)' : 'rgba(0, 0, 10, 0.18)';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.moveTo(baseX + step * 0.45, 1024);
+      ctx.quadraticCurveTo(baseX + step * 0.45 + 36, 560, Math.min(1020, tipX + step * 0.45), 16);
       ctx.stroke();
     }
+
+    // Feathered scalloped top margin
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    const scallops = numRays * 2;
+    for (let i = 0; i < scallops; i++) {
+      const x = (i + 0.5) * (1024 / scallops);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.beginPath();
+      ctx.arc(x, 0, 5.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   private paintPectoralTexture(ctx: CanvasRenderingContext2D, p: PaletteColors, skinId: FishColorPalette = this.currentSkinId) {
     const isTropical = skinId === 'tropical_paradise';
-    ctx.clearRect(0, 0, 256, 256);
-    const grad = ctx.createRadialGradient(20, 128, 5, 110, 128, 160);
+    ctx.clearRect(0, 0, 512, 512);
+    const grad = ctx.createRadialGradient(36, 256, 8, 220, 256, 320);
     grad.addColorStop(0.0, this.hexToRgba(isTropical ? '#22d3ee' : p.bodyHighlight, 0.72));
     grad.addColorStop(0.45, this.hexToRgba(isTropical ? '#fb923c' : p.finRim, 0.42));
-    grad.addColorStop(0.85, this.hexToRgba(isTropical ? '#fde047' : '#ffffff', 0.28));
-    grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.02)');
+    grad.addColorStop(0.84, this.hexToRgba(isTropical ? '#fde047' : '#ffffff', 0.28));
+    grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillRect(0, 0, 512, 512);
 
-    ctx.strokeStyle = isTropical ? 'rgba(254, 240, 138, 0.55)' : 'rgba(255, 255, 255, 0.45)';
-    ctx.lineWidth = 1.2;
-    for (let i = -8; i <= 8; i++) {
-      const angle = i * 0.08;
+    ctx.strokeStyle = isTropical ? 'rgba(254, 240, 138, 0.55)' : 'rgba(255, 255, 255, 0.48)';
+    ctx.lineWidth = 2.0;
+    for (let i = -9; i <= 9; i++) {
+      const angle = i * 0.075;
       ctx.beginPath();
-      ctx.moveTo(12, 128);
-      ctx.lineTo(12 + Math.cos(angle) * 230, 128 + Math.sin(angle) * 230);
+      ctx.moveTo(24, 256);
+      ctx.lineTo(24 + Math.cos(angle) * 465, 256 + Math.sin(angle) * 465);
       ctx.stroke();
     }
+  }
+
+  private paintPelvicTexture(ctx: CanvasRenderingContext2D, p: PaletteColors) {
+    ctx.clearRect(0, 0, 256, 512);
+    const baseGrad = ctx.createLinearGradient(0, 0, 256, 512);
+    baseGrad.addColorStop(0.0, this.hexToRgba(p.finBase, 0.96));
+    baseGrad.addColorStop(0.42, this.hexToRgba(p.finMid, 0.92));
+    baseGrad.addColorStop(0.74, this.hexToRgba(p.pelvicTip, 0.96));
+    baseGrad.addColorStop(1.0, '#ffffff');
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, 256, 512);
+
+    // Subtle ray lines & luminous white leading scimitar margin
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 2.0;
+    for (let i = 1; i <= 4; i++) {
+      const x = (i / 5) * 256;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x * 0.65 + 75, 512);
+      ctx.stroke();
+    }
+
+    const leadGrad = ctx.createLinearGradient(0, 0, 256, 0);
+    leadGrad.addColorStop(0.0, 'rgba(0,0,0,0)');
+    leadGrad.addColorStop(0.6, 'rgba(255,255,255,0.25)');
+    leadGrad.addColorStop(1.0, 'rgba(255,255,255,0.95)');
+    ctx.fillStyle = leadGrad;
+    ctx.fillRect(0, 0, 256, 512);
   }
 
   private hexToRgba(hex: string, alpha: number): string {
@@ -628,79 +904,102 @@ export class BettaFish {
     this.bodyMaterial = new THREE.MeshPhysicalMaterial({
       map: this.bodyTexture,
       normalMap: this.scaleNormalTexture,
-      normalScale: new THREE.Vector2(0.42, 0.42),
-      roughness: 0.24,
-      metalness: 0.38,
+      normalScale: new THREE.Vector2(0.62, 0.62),
+      roughness: 0.22,
+      metalness: 0.44,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.08,
+      clearcoatRoughness: 0.06,
       iridescence: 1.0,
-      iridescenceIOR: 1.42,
+      iridescenceIOR: 1.44,
       iridescenceThicknessRange: [160, 520],
-      sheen: 0.85,
-      sheenRoughness: 0.3,
-      sheenColor: new THREE.Color('#38bdf8'),
+      sheen: 0.9,
+      sheenRoughness: 0.28,
+      sheenColor: new THREE.Color('#60a5fa'),
     });
 
-    const createSilkMaterial = (tex: THREE.CanvasTexture, opacity: number) =>
+    this.headMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x11131a,
+      roughness: 0.36,
+      metalness: 0.1,
+      clearcoat: 0.78,
+      clearcoatRoughness: 0.12,
+      side: THREE.DoubleSide,
+    });
+
+    const createSilkMaterial = (tex: THREE.CanvasTexture, normalTex: THREE.CanvasTexture, opacity: number) =>
       new THREE.MeshPhysicalMaterial({
         map: tex,
+        normalMap: normalTex,
+        normalScale: new THREE.Vector2(0.62, 0.62),
         transparent: true,
         opacity,
-        alphaTest: 0.02,
+        alphaTest: 0.04,
         roughness: 0.28,
-        metalness: 0.12,
-        clearcoat: 0.7,
-        clearcoatRoughness: 0.18,
-        iridescence: 0.85,
-        iridescenceIOR: 1.35,
-        iridescenceThicknessRange: [200, 480],
+        metalness: 0.1,
+        clearcoat: 0.82,
+        clearcoatRoughness: 0.14,
+        iridescence: 0.9,
+        iridescenceIOR: 1.36,
+        iridescenceThicknessRange: [200, 500],
         sheen: 1.0,
-        sheenColor: new THREE.Color('#f472b6'),
+        sheenRoughness: 0.32,
+        sheenColor: new THREE.Color('#dbeafe'),
         side: THREE.DoubleSide,
         depthWrite: false,
       });
 
-    this.caudalMaterial = createSilkMaterial(this.caudalTexture, 0.94);
-    this.sailMaterial = createSilkMaterial(this.sailTexture, 0.92);
-    this.pectoralMaterial = createSilkMaterial(this.pectoralTexture, 0.72);
-    this.pelvicMaterial = new THREE.MeshPhysicalMaterial({
-      color: '#3b82f6',
-      roughness: 0.25,
-      metalness: 0.2,
-      clearcoat: 0.8,
-      iridescence: 0.8,
+    this.caudalMaterial = createSilkMaterial(this.caudalTexture, this.caudalNormalTexture, 0.96);
+    this.sailMaterial = createSilkMaterial(this.sailTexture, this.sailNormalTexture, 0.95);
+    this.pectoralMaterial = new THREE.MeshPhysicalMaterial({
+      map: this.pectoralTexture,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.72,
+      alphaTest: 0.02,
+      roughness: 0.26,
+      metalness: 0.1,
+      clearcoat: 0.75,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.pelvicMaterial = new THREE.MeshPhysicalMaterial({
+      map: this.pelvicTexture,
+      roughness: 0.24,
+      metalness: 0.18,
+      clearcoat: 0.88,
+      iridescence: 0.82,
+      transparent: true,
+      opacity: 0.96,
       side: THREE.DoubleSide,
     });
 
     this.irisMaterial = new THREE.MeshStandardMaterial({
-      color: 0x60a5fa,
-      roughness: 0.18,
-      metalness: 0.5,
+      map: this.irisTexture,
+      color: 0xffffff,
+      roughness: 0.16,
+      metalness: 0.38,
     });
 
     this.corneaMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
-      roughness: 0.04,
+      roughness: 0.03,
       metalness: 0.0,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.03,
+      clearcoatRoughness: 0.02,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.26,
       depthWrite: false,
     });
 
     this.pupilMaterial = new THREE.MeshStandardMaterial({
       color: 0x020205,
-      roughness: 0.04,
+      roughness: 0.03,
       metalness: 0.1,
     });
 
     this.gillMembraneMaterial = new THREE.MeshStandardMaterial({
       color: 0x7f1d1d,
-      roughness: 0.45,
-      metalness: 0.05,
+      roughness: 0.42,
+      metalness: 0.06,
       side: THREE.DoubleSide,
     });
 
@@ -711,25 +1010,25 @@ export class BettaFish {
     });
   }
 
-  // Anatomically faithful sculpted Betta splendens torso (44 longitudinal rings x 28 radial segments)
+  // Anatomically faithful high-resolution sculpted Betta splendens torso (56x36)
   private buildSculptedBody() {
-    const numRings = 44;
-    const radialSegs = 28;
+    const numRings = this.isSoftwareGl ? 44 : 56;
+    const radialSegs = this.isSoftwareGl ? 26 : 36;
 
-    // Longitudinal profile from upturned mouth tip (x=0.92) to tail fan base (x=-1.18)
+    // Sleek Betta splendens profile: upturned superior mouth (x=0.90) -> muscular arched shoulders -> tapered peduncle (x=-1.16)
     const profiles: { x: number; yOff: number; rY: number; rZ: number; ridge: number }[] = [
-      { x: 0.92,  yOff: 0.115, rY: 0.022, rZ: 0.024, ridge: 0.0  }, // Upper snout tip
-      { x: 0.86,  yOff: 0.105, rY: 0.055, rZ: 0.045, ridge: 0.02 }, // Mouth bridge
-      { x: 0.76,  yOff: 0.10,  rY: 0.095, rZ: 0.072, ridge: 0.04 }, // Forehead concavity
-      { x: 0.62,  yOff: 0.115, rY: 0.145, rZ: 0.098, ridge: 0.06 }, // Eye socket plane
-      { x: 0.46,  yOff: 0.12,  rY: 0.192, rZ: 0.122, ridge: 0.09 }, // Cranial arch / operculum
-      { x: 0.28,  yOff: 0.105, rY: 0.228, rZ: 0.132, ridge: 0.12 }, // Deep chest & pectoral root
-      { x: 0.08,  yOff: 0.08,  rY: 0.225, rZ: 0.126, ridge: 0.14 }, // Full flank
-      { x: -0.16, yOff: 0.055, rY: 0.198, rZ: 0.102, ridge: 0.12 }, // Dorsal/anal insertion
-      { x: -0.44, yOff: 0.032, rY: 0.152, rZ: 0.072, ridge: 0.09 }, // Posterior taper
-      { x: -0.72, yOff: 0.018, rY: 0.105, rZ: 0.046, ridge: 0.05 }, // Peduncle start
-      { x: -0.98, yOff: 0.008, rY: 0.072, rZ: 0.032, ridge: 0.02 }, // Caudal peduncle
-      { x: -1.18, yOff: 0.0,   rY: 0.045, rZ: 0.02,  ridge: 0.0  }, // Tail fan root
+      { x: 0.90,  yOff: 0.095, rY: 0.024, rZ: 0.026, ridge: 0.0  }, // Upturned snout tip
+      { x: 0.83,  yOff: 0.088, rY: 0.058, rZ: 0.048, ridge: 0.01 }, // Snout bridge
+      { x: 0.71,  yOff: 0.085, rY: 0.104, rZ: 0.078, ridge: 0.03 }, // Sloped forehead
+      { x: 0.56,  yOff: 0.088, rY: 0.158, rZ: 0.110, ridge: 0.06 }, // Eye socket plane
+      { x: 0.39,  yOff: 0.090, rY: 0.216, rZ: 0.136, ridge: 0.09 }, // Cranial arch / operculum crest
+      { x: 0.19,  yOff: 0.074, rY: 0.264, rZ: 0.146, ridge: 0.13 }, // Muscular shoulders & chest
+      { x: -0.04, yOff: 0.056, rY: 0.258, rZ: 0.134, ridge: 0.14 }, // Full flank & dorsal arch
+      { x: -0.30, yOff: 0.040, rY: 0.230, rZ: 0.108, ridge: 0.12 }, // Mid-posterior body
+      { x: -0.58, yOff: 0.026, rY: 0.188, rZ: 0.080, ridge: 0.08 }, // Posterior taper
+      { x: -0.84, yOff: 0.015, rY: 0.146, rZ: 0.052, ridge: 0.04 }, // Peduncle neck
+      { x: -1.03, yOff: 0.008, rY: 0.124, rZ: 0.036, ridge: 0.02 }, // Muscular caudal peduncle
+      { x: -1.16, yOff: 0.004, rY: 0.108, rZ: 0.024, ridge: 0.0  }, // Tail fan root
     ];
 
     const positions: number[] = [];
@@ -742,7 +1041,7 @@ export class BettaFish {
       const i0 = Math.floor(scaled);
       const i1 = Math.min(profiles.length - 1, i0 + 1);
       const f = scaled - i0;
-      const smoothF = f * f * (3 - 2 * f); // smoothstep interpolation
+      const smoothF = f * f * (3 - 2 * f);
 
       const p0 = profiles[i0];
       const p1 = profiles[i1];
@@ -759,12 +1058,14 @@ export class BettaFish {
         const sinT = Math.sin(theta);
         const cosT = Math.cos(theta);
 
-        // Keel shaping: sharper dorsal spine and fuller rounded chest
-        const dorsalBoost = sinT > 0 ? 1 + ridge * Math.pow(sinT, 2.2) : 1;
-        const lateralPinch = 1 - Math.abs(sinT) * 0.12;
+        // Muscular dorsal arch & sculpted laterally-compressed Betta cross-section
+        const dorsalBoost = sinT > 0 ? 1 + ridge * Math.pow(sinT, 2.1) : 1;
+        const ventralRound = sinT < 0 ? 1 + 0.05 * Math.pow(-sinT, 1.8) : 1;
+        const lateralPinch = 1 - Math.abs(sinT) * 0.14;
+        const flankCurve = Math.sign(cosT) * Math.pow(Math.abs(cosT), 0.92);
 
-        const y = yOff + sinT * rY * dorsalBoost;
-        const z = cosT * rZ * lateralPinch;
+        const y = yOff + sinT * rY * dorsalBoost * ventralRound;
+        const z = flankCurve * rZ * lateralPinch;
 
         positions.push(x, y, z);
         uvs.push(u, v);
@@ -797,53 +1098,62 @@ export class BettaFish {
     this.fishRoot.add(this.bodyMesh);
   }
 
-  // Sculpted Upturned Betta Lower Jaw + Curved Cheek Operculum + Crimson Flare Beard
+  // Sculpted Superior Betta Mouth (Upper Lip + Articulated Lower Jaw) + Flush Cheek Operculum + Flare Beard
   private buildMouthAndGills() {
-    // Upturned lower lip / jaw (can subtly open when gulping/breathing)
-    const jawGeom = new THREE.SphereGeometry(0.042, 12, 12);
-    jawGeom.scale(1.35, 0.55, 0.85);
-    this.lowerJawMesh = new THREE.Mesh(jawGeom, this.bodyMaterial);
-    this.lowerJawMesh.position.set(0.89, 0.088, 0);
-    this.lowerJawMesh.rotation.z = 0.25;
+    // Upper lip arch integrated smoothly into upturned snout
+    const upperLipGeom = new THREE.SphereGeometry(0.036, 14, 12);
+    upperLipGeom.scale(1.25, 0.58, 0.92);
+    const upperLip = new THREE.Mesh(upperLipGeom, this.headMaterial);
+    upperLip.position.set(0.885, 0.105, 0);
+    upperLip.rotation.z = -0.22;
+    this.fishRoot.add(upperLip);
+
+    // Sculpted upturned lower jaw & chin bridge
+    const jawGeom = new THREE.SphereGeometry(0.048, 16, 14);
+    jawGeom.scale(1.45, 0.56, 0.9);
+    this.lowerJawMesh = new THREE.Mesh(jawGeom, this.headMaterial);
+    this.lowerJawMesh.position.set(0.855, 0.072, 0);
+    this.lowerJawMesh.rotation.z = 0.34;
     this.fishRoot.add(this.lowerJawMesh);
 
-    // Curved contoured Operculum plates (hug the cheeks cleanly!)
-    const opGeom = new THREE.SphereGeometry(0.16, 16, 14, 0, Math.PI * 0.72, Math.PI * 0.22, Math.PI * 0.62);
-    opGeom.scale(1.15, 1.15, 0.58);
+    // Flush Contoured Cheek Operculum plates (hug cheeks smoothly without sticking out)
+    const opGeom = new THREE.SphereGeometry(0.148, 18, 16, 0, Math.PI * 0.62, Math.PI * 0.24, Math.PI * 0.56);
+    opGeom.scale(1.14, 1.12, 0.44);
 
-    this.leftOperculum = new THREE.Mesh(opGeom, this.bodyMaterial);
-    this.leftOperculum.position.set(0.44, 0.11, 0.035);
+    this.leftOperculum = new THREE.Mesh(opGeom, this.headMaterial);
+    this.leftOperculum.position.set(0.41, 0.068, 0.056);
     this.leftOperculum.rotation.y = Math.PI * 0.18;
     this.fishRoot.add(this.leftOperculum);
 
-    this.rightOperculum = new THREE.Mesh(opGeom, this.bodyMaterial);
-    this.rightOperculum.position.set(0.44, 0.11, -0.035);
+    this.rightOperculum = new THREE.Mesh(opGeom, this.headMaterial);
+    this.rightOperculum.position.set(0.41, 0.068, -0.056);
     this.rightOperculum.rotation.y = -Math.PI * 0.18;
     this.rightOperculum.scale.z = -1;
     this.fishRoot.add(this.rightOperculum);
 
-    // Dramatic Branchiostegal Gill Flare Beard (emerges from under gill covers on flare)
+    // Dramatic Branchiostegal Gill Flare Beard tucked under throat
     const beardShape = new THREE.Shape();
     beardShape.moveTo(0, 0);
-    beardShape.quadraticCurveTo(0.08, -0.14, 0.0, -0.2);
-    beardShape.quadraticCurveTo(-0.12, -0.18, -0.14, -0.02);
+    beardShape.quadraticCurveTo(0.085, -0.14, 0.0, -0.205);
+    beardShape.quadraticCurveTo(-0.125, -0.185, -0.145, -0.02);
     beardShape.closePath();
 
-    const beardGeom = new THREE.ShapeGeometry(beardShape, 12);
+    const beardGeom = new THREE.ShapeGeometry(beardShape, 14);
     this.leftBranchioBeard = new THREE.Mesh(beardGeom, this.gillMembraneMaterial);
-    this.leftBranchioBeard.position.set(0.48, 0.03, 0.06);
+    this.leftBranchioBeard.position.set(0.45, 0.005, 0.064);
     this.leftBranchioBeard.rotation.set(0.35, 0.4, 0);
-    this.leftBranchioBeard.scale.set(0.1, 0.1, 0.1);
+    this.leftBranchioBeard.scale.set(0.08, 0.08, 0.08);
     this.fishRoot.add(this.leftBranchioBeard);
 
     this.rightBranchioBeard = new THREE.Mesh(beardGeom, this.gillMembraneMaterial);
-    this.rightBranchioBeard.position.set(0.48, 0.03, -0.06);
+    this.rightBranchioBeard.position.set(0.45, 0.005, -0.064);
     this.rightBranchioBeard.rotation.set(-0.35, -0.4, 0);
-    this.rightBranchioBeard.scale.set(0.1, 0.1, 0.1);
+    this.rightBranchioBeard.scale.set(0.08, 0.08, 0.08);
     this.fishRoot.add(this.rightBranchioBeard);
   }
 
   private buildEyes() {
+    this.eyeSparkMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
     this.leftEye = this.createRealisticEye(true);
     this.rightEye = this.createRealisticEye(false);
     this.fishRoot.add(this.leftEye);
@@ -854,91 +1164,110 @@ export class BettaFish {
     const eye = new THREE.Group();
     const zSign = isLeft ? 1 : -1;
 
-    // Metallic iridescent iris sphere
-    const irisGeom = new THREE.SphereGeometry(0.056, 18, 18);
-    irisGeom.scale(1.0, 1.0, 0.65);
+    // Flush subtle dark orbital socket cushion (no chunky protruding torus)
+    const socketGeom = new THREE.SphereGeometry(0.052, 18, 16);
+    socketGeom.scale(1.06, 1.02, 0.46);
+    const socket = new THREE.Mesh(socketGeom, this.headMaterial);
+    socket.position.set(-0.003, 0, -0.004 * zSign);
+    eye.add(socket);
+
+    // Metallic striated iris dome
+    const irisGeom = new THREE.SphereGeometry(0.045, 20, 20);
+    irisGeom.scale(1.0, 1.0, 0.54);
     const iris = new THREE.Mesh(irisGeom, this.irisMaterial);
+    iris.position.set(0, 0, 0.004 * zSign);
     eye.add(iris);
 
     // Movable pupil + catchlight group
     const pupilGroup = new THREE.Group();
-    const pupilGeom = new THREE.SphereGeometry(0.036, 16, 16);
-    pupilGeom.scale(1.0, 1.0, 0.55);
+    const pupilGeom = new THREE.SphereGeometry(0.028, 18, 18);
+    pupilGeom.scale(1.0, 1.0, 0.48);
     const pupil = new THREE.Mesh(pupilGeom, this.pupilMaterial);
-    pupil.position.set(0.012, 0.002, 0.022 * zSign);
+    pupil.position.set(0.006, 0.002, 0.021 * zSign);
     pupilGroup.add(pupil);
 
-    // Crisp catchlight dot
-    const sparkGeom = new THREE.SphereGeometry(0.011, 8, 8);
-    const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const spark = new THREE.Mesh(sparkGeom, sparkMat);
-    spark.position.set(0.022, 0.018, 0.038 * zSign);
+    // Crisp specular wet catchlight dot
+    const sparkGeom = new THREE.SphereGeometry(0.0075, 10, 10);
+    const spark = new THREE.Mesh(sparkGeom, this.eyeSparkMaterial);
+    spark.position.set(0.014, 0.012, 0.032 * zSign);
     pupilGroup.add(spark);
 
     eye.add(pupilGroup);
     if (isLeft) this.leftPupilGroup = pupilGroup;
     else this.rightPupilGroup = pupilGroup;
 
-    // Glossy outer cornea lens (no opaque occlusion)
-    const corneaGeom = new THREE.SphereGeometry(0.06, 18, 18);
-    corneaGeom.scale(1.0, 1.0, 0.72);
+    // Glossy outer convex cornea lens
+    const corneaGeom = new THREE.SphereGeometry(0.049, 20, 20);
+    corneaGeom.scale(1.0, 1.0, 0.62);
     const cornea = new THREE.Mesh(corneaGeom, this.corneaMaterial);
+    cornea.position.set(0, 0, 0.004 * zSign);
     eye.add(cornea);
 
-    eye.position.set(0.67, 0.135, 0.072 * zSign);
-    eye.rotation.y = 0.2 * zSign;
+    // Positioned flush inside the sleek facial cheek contour
+    eye.position.set(0.625, 0.114, 0.072 * zSign);
+    eye.rotation.y = 0.24 * zSign;
     return eye;
   }
 
-  // Show-grade Halfmoon Caudal, Sweeping Dorsal, Full Anal Curtain, Ribbon Pelvics, Hummingbird Pectorals
+  // Photo-proportioned Show-Grade Halfmoon Caudal, Sweeping Dorsal & Anal Sails, Sculpted Pelvics, Gossamer Pectorals
   private buildShowFins() {
-    // 1. Halfmoon 180-degree Caudal Fin (Tail)
-    // Built cleanly WITHOUT duplicate reversed triangles so normals & iridescence shine!
-    this.caudalFinGeom = this.createHalfmoonCaudal(1.95, 2.25, Math.PI * 1.04, 44, 28);
+    const cRadSegs = this.isSoftwareGl ? 56 : 84;
+    const cLenSegs = this.isSoftwareGl ? 24 : 34;
+
+    // 1. Halfmoon 196-degree Caudal Fin (silky macro silk drapes + fine ray normals)
+    this.caudalFinGeom = this.createHalfmoonCaudal(1.66, 1.56, Math.PI * 1.09, cRadSegs, cLenSegs);
     this.caudalFinMesh = new THREE.Mesh(this.caudalFinGeom, this.caudalMaterial);
-    this.caudalFinMesh.position.set(-1.16, 0.0, 0);
+    this.caudalFinMesh.position.set(-1.07, 0.004, 0);
     this.caudalFinMesh.rotation.y = Math.PI;
     this.fishRoot.add(this.caudalFinMesh);
     this.caudalOriginalPositions = new Float32Array(this.caudalFinGeom.attributes.position.array);
 
-    // 2. Majestic Crested Dorsal Fin (Sits flush along upper back from x=0.05 to x=-0.95)
-    this.dorsalFinGeom = this.createShowSail(1.22, 0.92, 32, 18, true);
+    // 2. Seamless Broad Fan-Shaped Dorsal Fin
+    this.dorsalFinGeom = this.createShowSail(true, this.isSoftwareGl ? 36 : 48, this.isSoftwareGl ? 18 : 24);
     this.dorsalFinMesh = new THREE.Mesh(this.dorsalFinGeom, this.sailMaterial);
-    this.dorsalFinMesh.position.set(-0.32, 0.18, 0);
     this.fishRoot.add(this.dorsalFinMesh);
     this.dorsalOriginalPositions = new Float32Array(this.dorsalFinGeom.attributes.position.array);
 
-    // 3. Long Sweeping Anal Curtain Fin (Stretches from belly x=0.05 all the way into tail overlap)
-    this.analFinGeom = this.createShowSail(1.42, 1.04, 34, 18, false);
+    // 3. Seamless Broad Sweeping Anal Curtain Fin
+    this.analFinGeom = this.createShowSail(false, this.isSoftwareGl ? 38 : 50, this.isSoftwareGl ? 18 : 24);
     this.analFinMesh = new THREE.Mesh(this.analFinGeom, this.sailMaterial);
-    this.analFinMesh.position.set(-0.22, -0.14, 0);
     this.fishRoot.add(this.analFinMesh);
     this.analOriginalPositions = new Float32Array(this.analFinGeom.attributes.position.array);
 
-    // 4. Graceful Sweeping Pelvic Ribbon Fins (Tapered curved blades instead of stiff sticks!)
+    // 4. Sweeping Scimitar Pelvic Blade Fins
     this.leftPelvicGeom = this.createPelvicRibbon();
     this.leftPelvicOrig = new Float32Array(this.leftPelvicGeom.attributes.position.array);
     this.leftPelvicMesh = new THREE.Mesh(this.leftPelvicGeom, this.pelvicMaterial);
-    this.leftPelvicMesh.position.set(0.24, -0.14, 0.048);
-    this.leftPelvicMesh.rotation.set(0.18, 0.08, -0.58); // Sweeps gracefully backward!
+    this.leftPelvicMesh.position.set(0.29, -0.142, 0.04);
+    this.leftPelvicMesh.rotation.set(0.15, 0.1, -0.45);
     this.fishRoot.add(this.leftPelvicMesh);
 
     this.rightPelvicGeom = this.createPelvicRibbon();
     this.rightPelvicOrig = new Float32Array(this.rightPelvicGeom.attributes.position.array);
     this.rightPelvicMesh = new THREE.Mesh(this.rightPelvicGeom, this.pelvicMaterial);
-    this.rightPelvicMesh.position.set(0.24, -0.14, -0.048);
-    this.rightPelvicMesh.rotation.set(-0.18, -0.08, -0.58);
+    this.rightPelvicMesh.position.set(0.26, -0.148, -0.04);
+    this.rightPelvicMesh.rotation.set(-0.15, -0.1, -0.64);
     this.fishRoot.add(this.rightPelvicMesh);
 
-    // 5. Delicate Gossamer Pectoral Fins
+    // 5. Muscular Pectoral Buds + Delicate Gossamer Pectoral Fans
+    const pBudGeom = new THREE.SphereGeometry(0.036, 12, 10);
+    pBudGeom.scale(1.15, 0.85, 0.55);
+    const leftBud = new THREE.Mesh(pBudGeom, this.bodyMaterial);
+    leftBud.position.set(0.30, -0.025, 0.118);
+    this.fishRoot.add(leftBud);
+
+    const rightBud = new THREE.Mesh(pBudGeom, this.bodyMaterial);
+    rightBud.position.set(0.30, -0.025, -0.118);
+    this.fishRoot.add(rightBud);
+
     const pectoralGeom = this.createPectoralFan();
     this.leftPectoralFin = new THREE.Mesh(pectoralGeom, this.pectoralMaterial);
-    this.leftPectoralFin.position.set(0.32, 0.01, 0.115);
+    this.leftPectoralFin.position.set(0.30, -0.025, 0.128);
     this.leftPectoralFin.rotation.set(0.15, 0.48, -0.18);
     this.fishRoot.add(this.leftPectoralFin);
 
     this.rightPectoralFin = new THREE.Mesh(pectoralGeom, this.pectoralMaterial);
-    this.rightPectoralFin.position.set(0.32, 0.01, -0.115);
+    this.rightPectoralFin.position.set(0.30, -0.025, -0.128);
     this.rightPectoralFin.rotation.set(-0.15, -0.48, -0.18);
     this.rightPectoralFin.scale.set(1, 1, -1);
     this.fishRoot.add(this.rightPectoralFin);
@@ -956,28 +1285,30 @@ export class BettaFish {
     const uvs: number[] = [];
     const indices: number[] = [];
 
-    // Create fan grid (including r=0 arc of tiny peduncle vertices so UVs stay polar-clean without distortion!)
     const rowSize = radialSegs + 1;
     for (let r = 0; r <= lengthSegs; r++) {
       const radiusRatio = r / lengthSegs;
-      const baseR = 0.04 + Math.pow(radiusRatio, 0.92) * length;
+      const baseR = 0.085 + Math.pow(radiusRatio, 0.88) * length;
 
       for (let s = 0; s <= radialSegs; s++) {
         const v = s / radialSegs;
         const angle = -arc / 2 + v * arc;
 
-        // Subtle Halfmoon D-shape profile + gentle rosetail edge frill
-        const dShapeBoost = 1.0 - 0.12 * Math.pow(Math.abs(v - 0.5) * 2, 2);
+        // Classic Halfmoon D-shape profile + gentle ray-tip scalloping near outer margin
+        const edgeDist = Math.abs(v - 0.5) * 2;
+        const dShapeBoost = 1.0 - 0.065 * Math.pow(edgeDist, 2.2);
         let rad = baseR * dShapeBoost;
-        if (radiusRatio > 0.78) {
-          const tipT = (radiusRatio - 0.78) / 0.22;
-          rad += Math.sin(v * Math.PI * 22) * 0.045 * tipT * tipT;
+        if (radiusRatio > 0.86) {
+          const tipT = (radiusRatio - 0.86) / 0.14;
+          rad += Math.abs(Math.sin(v * Math.PI * 28)) * 0.026 * tipT * tipT;
         }
 
         const x = Math.cos(angle) * rad * (width / length);
         const y = Math.sin(angle) * rad;
-        // Pleated silk fold depth along rays
-        const z = Math.sin(v * Math.PI * 28) * 0.022 * radiusRatio;
+        // Organic flowing silk drape folds (smooth low-frequency folds; fine ray relief handled by 1024px normal map)
+        const drape1 = Math.sin(v * Math.PI * 7) * 0.032 * Math.pow(radiusRatio, 1.15);
+        const drape2 = Math.cos(v * Math.PI * 15) * 0.012 * Math.pow(radiusRatio, 1.5);
+        const z = drape1 + drape2;
 
         positions.push(x, y, z);
         uvs.push(radiusRatio, v);
@@ -1002,40 +1333,52 @@ export class BettaFish {
     return geom;
   }
 
-  private createShowSail(
-    length: number,
-    height: number,
-    segX: number,
-    segY: number,
-    isDorsal: boolean
-  ): THREE.BufferGeometry {
+  private createShowSail(isDorsal: boolean, segX: number, segY: number): THREE.BufferGeometry {
     const geom = new THREE.BufferGeometry();
     const positions: number[] = [];
     const uvs: number[] = [];
     const indices: number[] = [];
-    const ySign = isDorsal ? 1 : -1;
     const rowSize = segX + 1;
 
+    // Exact spine/belly attachment endpoints matching buildSculptedBody()
+    const frontX = isDorsal ? 0.02 : 0.19;
+    const backX = isDorsal ? -0.99 : -1.01;
+
     for (let iy = 0; iy <= segY; iy++) {
-      const v = iy / segY; // 0 = attached to body, 1 = flowing outer tip
+      const v = iy / segY; // 0 = embedded seamlessly along torso, 1 = flowing outer margin
 
       for (let ix = 0; ix <= segX; ix++) {
         const u = ix / segX; // 0 = front leading edge, 1 = rear trailing edge
+        const baseX = THREE.MathUtils.lerp(frontX, backX, u);
 
-        // Base attachment curves along body back/belly; outer tip sweeps boldly back
-        const baseCurveY = -Math.sin(u * Math.PI * 0.75) * 0.05 * ySign;
-        const crestShape = isDorsal
-          ? Math.sin(Math.pow(u, 0.75) * Math.PI * 0.85) * 0.92 + Math.pow(u, 1.5) * 0.35
-          : 0.45 + Math.sin(u * Math.PI * 0.8) * 0.42 + Math.pow(u, 1.4) * 0.38;
+        // Compute exact embedded root Y hugging the torso profile
+        const rootY = isDorsal
+          ? THREE.MathUtils.lerp(0.31, 0.108, Math.pow(u, 0.9))
+          : THREE.MathUtils.lerp(-0.16, -0.098, Math.pow(u, 1.25));
 
-        const sweepX = -u * length * (1 + v * 0.48) + length * 0.45;
-        const ruffle = v > 0.75 ? Math.sin(u * Math.PI * 16) * 0.03 * Math.pow((v - 0.75) / 0.25, 2) : 0;
-        const y = baseCurveY + ySign * (v * height * crestShape + ruffle);
+        let tipX: number;
+        let tipY: number;
+        if (isDorsal) {
+          // Graceful sweeping crest arching up and back over the upper caudal fan
+          const frontArc = (1 - u) * 0.11 * Math.sin(u * Math.PI * 0.9 + 0.25);
+          tipX = baseX - u * 0.82 - (1 - u) * 0.08 + frontArc;
+          tipY = 0.90 + Math.sin(Math.pow(u, 0.72) * Math.PI * 0.88) * 0.34 - Math.pow(u, 2.0) * 0.2;
+        } else {
+          // Anal curtain sweeps down behind pelvics and extends smoothly back beneath lower caudal
+          tipX = baseX - (0.30 + Math.pow(u, 1.06) * 0.70);
+          tipY = -0.97 - Math.sin(u * Math.PI * 0.86) * 0.27 + Math.pow(u, 2.1) * 0.21;
+        }
 
-        // Silk pleating along Z
-        const z = Math.sin(u * Math.PI * 18) * 0.018 * v;
+        const curvePower = Math.pow(v, 0.86);
+        const bowX = isDorsal && u < 0.28 ? Math.sin(v * Math.PI) * 0.08 * (1 - u / 0.28) : 0;
+        const ruffle = v > 0.84 ? Math.abs(Math.sin(u * Math.PI * 18)) * 0.018 * Math.pow((v - 0.84) / 0.16, 2) : 0;
 
-        positions.push(sweepX, y, z);
+        const x = THREE.MathUtils.lerp(baseX, tipX, curvePower) + bowX;
+        const y = THREE.MathUtils.lerp(rootY, tipY, v) + (isDorsal ? ruffle : -ruffle);
+        // Soft natural silk pleats
+        const z = (Math.sin(u * Math.PI * 6) * 0.026 + Math.cos(u * Math.PI * 13) * 0.01) * v;
+
+        positions.push(x, y, z);
         uvs.push(u, v);
       }
     }
@@ -1059,24 +1402,24 @@ export class BettaFish {
   }
 
   private createPelvicRibbon(): THREE.BufferGeometry {
-    const lengthSegs = 16;
-    const widthSegs = 4;
+    const lengthSegs = 22;
+    const widthSegs = 8;
     const geom = new THREE.BufferGeometry();
     const positions: number[] = [];
     const uvs: number[] = [];
     const indices: number[] = [];
-    const len = 1.05;
+    const len = 0.90;
 
     for (let iy = 0; iy <= lengthSegs; iy++) {
-      const t = iy / lengthSegs; // 0 = chest attachment, 1 = pointed tip
-      const halfW = Math.sin(Math.pow(t, 0.55) * Math.PI) * 0.085 * (1 - t * 0.45) + 0.004 * (1 - t);
+      const t = iy / lengthSegs;
+      const halfW = Math.sin(Math.pow(t, 0.46) * Math.PI) * 0.095 * (1 - t * 0.42) + 0.004 * (1 - t);
       const y = -t * len;
-      const curveX = -Math.pow(t, 1.6) * 0.25; // graceful sweep backward
+      const curveX = -Math.pow(t, 1.5) * 0.24;
 
       for (let ix = 0; ix <= widthSegs; ix++) {
         const u = ix / widthSegs;
         const x = curveX + (u - 0.5) * 2 * halfW;
-        const z = Math.sin(u * Math.PI) * 0.012 * (1 - t);
+        const z = Math.sin(u * Math.PI) * 0.016 * (1 - t * 0.85);
         positions.push(x, y, z);
         uvs.push(u, t);
       }
@@ -1108,8 +1451,7 @@ export class BettaFish {
     shape.bezierCurveTo(0.44, 0.08, 0.42, -0.1, 0.3, -0.16);
     shape.bezierCurveTo(0.18, -0.2, 0.06, -0.1, 0, 0);
 
-    const geom = new THREE.ShapeGeometry(shape, 14);
-    // Normalize UVs to 0..1 across bounding box so pectoralTexture maps accurately
+    const geom = new THREE.ShapeGeometry(shape, 16);
     geom.computeBoundingBox();
     const bb = geom.boundingBox!;
     const uvAttr = geom.attributes.uv;
@@ -1119,7 +1461,7 @@ export class BettaFish {
     for (let i = 0; i < posAttr.count; i++) {
       uvAttr.setXY(i, (posAttr.getX(i) - bb.min.x) / spanX, (posAttr.getY(i) - bb.min.y) / spanY);
     }
-    geom.scale(0.85, 0.85, 0.85);
+    geom.scale(0.86, 0.86, 0.86);
     return geom;
   }
 
@@ -1141,7 +1483,7 @@ export class BettaFish {
     gem.position.set(0.105, 0.025, 0);
     this.vipCrownGroup.add(gem);
 
-    this.vipCrownGroup.position.set(0.5, 0.34, 0);
+    this.vipCrownGroup.position.set(0.46, 0.31, 0);
     this.vipCrownGroup.rotation.z = -0.15;
   }
 
@@ -1150,7 +1492,17 @@ export class BettaFish {
   }
 
   public triggerGulp() {
-    this.mouthGulpTimer = 0.45;
+    this.mouthGulpTimer = 0.42;
+    this.mouthAnticipate = 0;
+  }
+
+  public setHeading(angle: number) {
+    this.headingAngle = angle;
+    this.group.rotation.y = angle;
+  }
+
+  public prepareBite(active: boolean) {
+    this.mouthAnticipate = active ? 1.0 : 0.0;
   }
 
   public updateSkin(skinId: FishColorPalette) {
@@ -1171,11 +1523,16 @@ export class BettaFish {
     this.paintPectoralTexture(this.pectoralTexture.image.getContext('2d')!, palette, skinId);
     this.pectoralTexture.needsUpdate = true;
 
+    this.paintPelvicTexture(this.pelvicTexture.image.getContext('2d')!, palette);
+    this.pelvicTexture.needsUpdate = true;
+
+    this.paintIrisTexture(this.irisTexture.image.getContext('2d')!, palette);
+    this.irisTexture.needsUpdate = true;
+
     this.bodyMaterial.sheenColor = new THREE.Color(palette.iridescenceTint);
+    this.headMaterial.color.set(palette.headMask);
     this.caudalMaterial.sheenColor = new THREE.Color(palette.finRim);
     this.sailMaterial.sheenColor = new THREE.Color(palette.finRim);
-    this.pelvicMaterial.color = new THREE.Color(palette.finMid);
-    this.irisMaterial.color = new THREE.Color(palette.eyeIris);
     this.gillMembraneMaterial.color = new THREE.Color(palette.gillMembrane);
 
     if (skinId === 'golden_imperial') {
@@ -1201,13 +1558,32 @@ export class BettaFish {
     delta: number,
     boundBox: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number }
   ) {
-    const speedMult = this.combatMode ? 5.2 : this.isFlaring ? 4.4 : this.isExcited ? 3.8 : 2.3;
+    if (this.excitedTimer > 0) {
+      this.excitedTimer = Math.max(0, this.excitedTimer - delta);
+      if (this.excitedTimer === 0) {
+        this.isExcited = false;
+      }
+    }
+
+    const speedNow = this.velocity.length();
+    this.currentSwimSpeed = THREE.MathUtils.damp(this.currentSwimSpeed, speedNow, 5.5, delta);
+    const motionFactor = THREE.MathUtils.clamp(this.currentSwimSpeed / 0.85, 0.28, 1.9);
+
+    const speedMult = this.combatMode
+      ? this.combatPreview
+        ? 3.1
+        : 5.2
+      : this.isFlaring
+      ? 4.4
+      : this.isExcited
+      ? 2.8 + motionFactor * 1.15
+      : 1.45 + motionFactor * 1.4;
     this.animTime += delta * speedMult;
 
     if (this.combatMode) {
       // PvP Arena combat positioning: spring toward stance + strike dash + recoil
-      const hoverX = Math.sin(this.animTime * 0.65) * 0.09;
-      const hoverY = Math.cos(this.animTime * 0.85) * 0.08 + (this.combatGuardActive ? 0.14 : 0);
+      const hoverX = Math.sin(this.animTime * 0.65) * (this.combatPreview ? 0.06 : 0.09);
+      const hoverY = Math.cos(this.animTime * 0.85) * (this.combatPreview ? 0.06 : 0.08) + (this.combatGuardActive ? 0.14 : 0);
 
       _toTarget.set(
         this.combatHomePos.x + this.combatDashOffset.x + hoverX,
@@ -1259,57 +1635,114 @@ export class BettaFish {
     } else {
       if (this.shieldMesh) this.shieldMesh.visible = false;
 
-      // 1. Graceful Natural Cruising Pathfinding (prefers broadside showcase angles)
-      this.wanderTimer -= delta;
-      if (this.wanderTimer <= 0) {
-        this.wanderTimer = 3.2 + Math.random() * 3.8;
-        const marginX = 0.65;
-        const marginY = 0.55;
-        // Keep Z closer to 0 so the full broadside silhouette & flowing fins shine
-        const zRange = this.isFlaring ? 0.35 : 0.9;
-        this.targetPosition.set(
-          THREE.MathUtils.randFloat(boundBox.minX + marginX, boundBox.maxX - marginX),
-          THREE.MathUtils.randFloat(boundBox.minY + marginY + 0.25, boundBox.maxY - marginY),
-          THREE.MathUtils.randFloat(-zRange, zRange)
-        );
-      }
-
+      // 1. Lifelike Betta Swimming: Burst-Cruise + Poised Mid-Water Hover Cycles
       _toTarget.subVectors(this.targetPosition, this.currentPosition);
       const dist = _toTarget.length();
-      const targetSpeed = this.isSleeping
-        ? 0.22
-        : this.isFlaring
-        ? 0.35
-        : this.isExcited
-        ? 1.55
-        : this.swimSpeed;
 
-      if (dist > 0.08) {
-        _toTarget.normalize();
-        // Gently slow down as fish arrives near target
-        const arriveScale = THREE.MathUtils.clamp(dist / 0.8, 0.25, 1.0);
-        _desiredVel.copy(_toTarget).multiplyScalar(targetSpeed * arriveScale);
-        this.velocity.lerp(_desiredVel, 1 - Math.exp(-3.0 * delta));
+      if (this.returningHome) {
+        // Locked direct return to main aquarium after Fighter mode
+        if (dist < 0.24 && this.currentPosition.x < 2.5) {
+          this.returningHome = false;
+          this.isHovering = true;
+          this.hoverPauseTimer = 1.5;
+          this.wanderTimer = 2.8;
+        }
+      } else if (this.isHovering) {
+        if (this.isExcited || this.isFlaring) {
+          this.isHovering = false;
+          this.hoverPauseTimer = 0;
+        } else {
+          this.hoverPauseTimer -= delta;
+          if (this.hoverPauseTimer <= 0) {
+            this.isHovering = false;
+            this.wanderTimer = 0;
+          }
+        }
+      } else {
+        this.wanderTimer -= delta;
+        if ((dist <= 0.18 && !this.isExcited && !this.isFlaring) || this.wanderTimer <= 0) {
+          if (dist <= 0.18 && !this.isExcited && !this.isFlaring) {
+            // Arrived smoothly -> pause & hover like a real Betta inspecting its territory
+            this.isHovering = true;
+            this.hoverPauseTimer = 1.4 + Math.random() * 2.3;
+          } else {
+            this.wanderTimer = 3.4 + Math.random() * 3.2;
+            const marginX = 0.7;
+            const marginY = 0.55;
+            const zRange = this.isFlaring ? 0.35 : 0.85;
+            const roll = Math.random();
+            // Real Bettas favor mid-to-upper water levels (labyrinth fish breathing near surface + patrolling center)
+            const chosenY =
+              roll < 0.32
+                ? THREE.MathUtils.randFloat(boundBox.maxY - 0.88, boundBox.maxY - 0.32)
+                : THREE.MathUtils.randFloat(boundBox.minY + marginY + 0.32, boundBox.maxY - marginY);
+            this.targetPosition.set(
+              THREE.MathUtils.randFloat(boundBox.minX + marginX, boundBox.maxX - marginX),
+              chosenY,
+              THREE.MathUtils.randFloat(-zRange, zRange)
+            );
+          }
+        }
+      }
+
+      if (this.isHovering) {
+        // Gentle stationary poise: forward drift decays, body levels upright with curious slight nose-up tilt
+        this.velocity.multiplyScalar(Math.exp(-4.2 * delta));
+        this.currentPosition.addScaledVector(this.velocity, delta);
+        this.pitchAngle = THREE.MathUtils.damp(
+          this.pitchAngle,
+          0.035 + Math.sin(this.animTime * 0.7) * 0.025,
+          2.6,
+          delta
+        );
+        this.rollAngle = THREE.MathUtils.damp(this.rollAngle, 0, 3.2, delta);
+      } else {
+        const targetSpeed = this.isSleeping
+          ? 0.24
+          : this.returningHome
+          ? 2.45
+          : this.isFlaring
+          ? 0.44
+          : this.isExcited
+          ? 1.85
+          : this.swimSpeed;
+
+        if (dist > 0.01) {
+          _toTarget.normalize();
+          const arriveScale = this.isExcited
+            ? THREE.MathUtils.clamp(dist / 0.4, 0.38, 1.0)
+            : THREE.MathUtils.clamp(dist / 0.7, 0.2, 1.0);
+          _desiredVel.copy(_toTarget).multiplyScalar(targetSpeed * arriveScale);
+          const steerRate = this.isExcited || this.returningHome ? 5.2 : 3.1;
+          this.velocity.lerp(_desiredVel, 1 - Math.exp(-steerRate * delta));
+        }
         this.currentPosition.addScaledVector(this.velocity, delta);
 
-        const speedNow = this.velocity.length();
-        if (speedNow > 0.03) {
+        const velLen = this.velocity.length();
+        if (velLen > 0.025) {
           const targetHeading = Math.atan2(-this.velocity.z, this.velocity.x);
           const headingDelta = shortestAngleDiff(this.headingAngle, targetHeading);
-          this.headingAngle += headingDelta * (1 - Math.exp(-3.6 * delta));
+          const turnRate = this.isExcited ? 6.2 : 3.8;
+          this.headingAngle += headingDelta * (1 - Math.exp(-turnRate * delta));
 
           const targetPitch = Math.asin(
-            THREE.MathUtils.clamp(this.velocity.y / (speedNow + 0.05), -0.65, 0.65)
+            THREE.MathUtils.clamp(this.velocity.y / (velLen + 0.06), -0.68, 0.68)
           );
-          this.pitchAngle = THREE.MathUtils.damp(this.pitchAngle, targetPitch, 3.2, delta);
+          this.pitchAngle = THREE.MathUtils.damp(this.pitchAngle, targetPitch, 4.0, delta);
 
-          const targetRoll = THREE.MathUtils.clamp(headingDelta * 0.45, -0.28, 0.28);
-          this.rollAngle = THREE.MathUtils.damp(this.rollAngle, targetRoll, 3.0, delta);
+          const targetRoll = THREE.MathUtils.clamp(headingDelta * 0.42, -0.26, 0.26);
+          this.rollAngle = THREE.MathUtils.damp(this.rollAngle, targetRoll, 3.4, delta);
         }
-
-        this.group.position.copy(this.currentPosition);
-        this.group.rotation.set(this.rollAngle, this.headingAngle, this.pitchAngle, 'ZYX');
       }
+
+      if (!this.returningHome) {
+        this.currentPosition.x = THREE.MathUtils.clamp(this.currentPosition.x, boundBox.minX + 0.48, boundBox.maxX - 0.48);
+        this.currentPosition.y = THREE.MathUtils.clamp(this.currentPosition.y, boundBox.minY + 0.42, boundBox.maxY - 0.24);
+        this.currentPosition.z = THREE.MathUtils.clamp(this.currentPosition.z, boundBox.minZ + 0.35, boundBox.maxZ - 0.35);
+      }
+
+      this.group.position.copy(this.currentPosition);
+      this.group.rotation.set(this.rollAngle, this.headingAngle, this.pitchAngle, 'ZYX');
     }
 
     // 2. Gill Breathing & Mirror Flare Animation
@@ -1317,32 +1750,33 @@ export class BettaFish {
     this.flareIntensity = THREE.MathUtils.damp(this.flareIntensity, targetFlare, 6.0, delta);
 
     const breathe = Math.sin(this.animTime * 2.2) * 0.035;
-    const opOpen = 0.04 + breathe + this.flareIntensity * 0.48;
+    const opOpen = 0.04 + breathe + this.flareIntensity * (this.combatPreview ? 0.32 : 0.48);
     this.leftOperculum.rotation.y = Math.PI * 0.18 - opOpen;
     this.rightOperculum.rotation.y = -Math.PI * 0.18 + opOpen;
 
     // Throat flare beard unfolds dramatically during flare
-    const beardScale = 0.08 + this.flareIntensity * 1.15;
+    const beardScale = 0.08 + this.flareIntensity * (this.combatPreview ? 0.72 : 1.15);
     this.leftBranchioBeard.scale.set(beardScale, beardScale, beardScale);
     this.rightBranchioBeard.scale.set(beardScale, beardScale, beardScale);
 
-    // Jaw breathing + gulp when eating
+    // Jaw breathing + gulp / food anticipation
     if (this.mouthGulpTimer > 0) this.mouthGulpTimer = Math.max(0, this.mouthGulpTimer - delta);
-    const gulpAngle = this.mouthGulpTimer > 0 ? Math.sin((this.mouthGulpTimer / 0.45) * Math.PI) * 0.45 : 0;
-    this.lowerJawMesh.rotation.z = 0.25 - Math.max(0, breathe * 1.2) - gulpAngle;
+    const gulpAngle = this.mouthGulpTimer > 0 ? Math.sin((this.mouthGulpTimer / 0.42) * Math.PI) * 0.46 : 0;
+    const anticipateOpen = this.mouthAnticipate * 0.18;
+    this.lowerJawMesh.rotation.z = 0.34 - Math.max(0, breathe * 1.2) - gulpAngle - anticipateOpen;
 
     // 3. Seamless S-Wave Spinal Deformation on Body + Synchronized Tail Root Offset!
-    const peduncleOffset = this.deformBodySpine();
+    const peduncleOffset = this.deformBodySpine(motionFactor);
 
-    // 4. Pectoral Hummingbird Flutter
-    const flutterFreq = this.animTime * 9.5;
-    const flutterAmp = 0.42 + this.flareIntensity * 0.28;
+    // 4. Pectoral Hummingbird Flutter (stabilizing faster when hovering/turning)
+    const flutterFreq = this.animTime * (this.isHovering ? 10.8 : 9.2);
+    const flutterAmp = (this.isHovering ? 0.46 : 0.38) + this.flareIntensity * 0.25;
     this.leftPectoralFin.rotation.y = 0.48 + Math.sin(flutterFreq) * flutterAmp;
     this.rightPectoralFin.rotation.y = -0.48 - Math.sin(flutterFreq + 0.35) * flutterAmp;
 
     // 5. Flowing Fins Synchronized with Body Wave
-    this.animateCaudalFin(peduncleOffset);
-    this.animateSails();
+    this.animateCaudalFin(peduncleOffset, motionFactor);
+    this.animateSails(motionFactor);
     this.animatePelvicRibbons();
 
     // 6. Subtle Eye Saccades (alert curious gaze)
@@ -1353,15 +1787,19 @@ export class BettaFish {
     }
 
     // Gentle hover buoyancy
-    this.group.position.y += Math.sin(this.animTime * 1.4) * 0.004;
+    this.group.position.y += Math.sin(this.animTime * 1.35) * (this.isHovering ? 0.008 : 0.004);
   }
 
   // Real traveling sinusoidal S-wave along the body spine (head stays steady, tail sweeps cleanly)
-  private deformBodySpine(): number {
+  private deformBodySpine(motionFactor = 1.0): number {
     const pos = this.bodyGeom.attributes.position;
     const orig = this.bodyOriginalPositions;
     const count = pos.count;
-    const amp = this.isFlaring ? 0.11 : 0.075;
+    const amp = this.isFlaring
+      ? 0.095
+      : this.isExcited
+      ? 0.082
+      : THREE.MathUtils.lerp(0.032, 0.068, THREE.MathUtils.clamp((motionFactor - 0.28) / 1.2, 0, 1));
 
     let peduncleZ = 0;
 
@@ -1371,13 +1809,13 @@ export class BettaFish {
       const oy = orig[idx + 1];
       const oz = orig[idx + 2];
 
-      // Normalize X from 0 (head/shoulders x=0.45) to 1 (tail root x=-1.18)
-      const bodyT = THREE.MathUtils.clamp((0.45 - ox) / 1.63, 0, 1);
+      // Normalize X from 0 (head/shoulders x=0.40) to 1 (tail root x=-1.16)
+      const bodyT = THREE.MathUtils.clamp((0.40 - ox) / 1.56, 0, 1);
       const flexWeight = bodyT * bodyT;
       const wave = Math.sin(this.animTime * 3.1 - bodyT * 2.4) * amp * flexWeight;
 
       pos.setXYZ(i, ox, oy, oz + wave);
-      if (ox < -1.14) {
+      if (ox < -1.12) {
         peduncleZ = wave;
       }
     }
@@ -1387,14 +1825,15 @@ export class BettaFish {
     return peduncleZ;
   }
 
-  private animateCaudalFin(peduncleZ: number) {
+  private animateCaudalFin(peduncleZ: number, motionFactor = 1.0) {
     // Anchor tail root cleanly to moving peduncle
     this.caudalFinMesh.position.z = peduncleZ;
 
     const pos = this.caudalFinGeom.attributes.position;
     const orig = this.caudalOriginalPositions;
     const count = pos.count;
-    const flareScale = 1.0 + this.flareIntensity * 0.28;
+    const flareScale = 1.0 + this.flareIntensity * (this.combatPreview ? 0.14 : 0.22);
+    const waveScale = this.isFlaring ? 1.1 : THREE.MathUtils.clamp(0.68 + motionFactor * 0.38, 0.7, 1.25);
 
     for (let i = 0; i < count; i++) {
       const idx = i * 3;
@@ -1403,13 +1842,11 @@ export class BettaFish {
       const oz = orig[idx + 2];
 
       const dist = Math.sqrt(ox * ox + oy * oy);
-      const ratio = THREE.MathUtils.clamp(dist / 2.25, 0, 1);
+      const ratio = THREE.MathUtils.clamp(dist / 1.56, 0, 1);
 
-      // Note: caudalFinMesh is rotated PI around Y, so local +Z corresponds to world -Z!
-      // Match peduncle phase smoothly at ratio -> 0, then ripple outward
-      const wave1 = Math.sin(this.animTime * 3.1 - 2.4 - ratio * 3.4) * 0.28 * Math.pow(ratio, 1.25);
-      const wave2 = Math.cos(this.animTime * 4.8 - ratio * 5.2 + oy * 1.4) * 0.08 * Math.pow(ratio, 1.8);
-      const verticalLilt = Math.cos(this.animTime * 2.3 - ratio * 2.6) * 0.06 * ratio;
+      const wave1 = Math.sin(this.animTime * 3.1 - 2.4 - ratio * 3.2) * 0.21 * waveScale * Math.pow(ratio, 1.3);
+      const wave2 = Math.cos(this.animTime * 4.8 - ratio * 5.0 + oy * 1.6) * 0.06 * waveScale * Math.pow(ratio, 1.8);
+      const verticalLilt = Math.cos(this.animTime * 2.3 - ratio * 2.4) * 0.04 * ratio;
 
       pos.setXYZ(
         i,
@@ -1423,8 +1860,15 @@ export class BettaFish {
     this.caudalFinGeom.computeVertexNormals();
   }
 
-  private animateSails() {
-    // Dorsal sail
+  private animateSails(motionFactor = 1.0) {
+    const spineAmp = this.isFlaring
+      ? 0.095
+      : this.isExcited
+      ? 0.082
+      : THREE.MathUtils.lerp(0.032, 0.068, THREE.MathUtils.clamp((motionFactor - 0.28) / 1.2, 0, 1));
+    const sailWaveScale = this.isFlaring ? 1.05 : THREE.MathUtils.clamp(0.7 + motionFactor * 0.35, 0.7, 1.2);
+
+    // Dorsal sail (positioned at 0,0,0 so ox is exact body space X)
     const dPos = this.dorsalFinGeom.attributes.position;
     const dOrig = this.dorsalOriginalPositions;
     for (let i = 0; i < dPos.count; i++) {
@@ -1433,17 +1877,17 @@ export class BettaFish {
       const oy = dOrig[idx + 1];
       const oz = dOrig[idx + 2];
 
-      const bodyT = THREE.MathUtils.clamp((0.45 - (ox - 0.32)) / 1.63, 0, 1);
-      const spineZ = Math.sin(this.animTime * 3.1 - bodyT * 2.4) * 0.075 * bodyT * bodyT;
-      const tipRatio = THREE.MathUtils.clamp(Math.abs(oy) / 0.92, 0, 1);
+      const bodyT = THREE.MathUtils.clamp((0.40 - ox) / 1.56, 0, 1);
+      const spineZ = Math.sin(this.animTime * 3.1 - bodyT * 2.4) * spineAmp * bodyT * bodyT;
+      const tipRatio = THREE.MathUtils.clamp((oy - 0.15) / 0.95, 0, 1);
 
-      const wave = Math.sin(this.animTime * 3.1 - 1.2 - tipRatio * 2.2 + ox * 1.5) * 0.16 * Math.pow(tipRatio, 1.3);
+      const wave = Math.sin(this.animTime * 3.1 - 1.2 - tipRatio * 2.2 + ox * 1.5) * 0.135 * sailWaveScale * Math.pow(tipRatio, 1.35);
       dPos.setXYZ(i, ox, oy, oz + spineZ + wave);
     }
     dPos.needsUpdate = true;
     this.dorsalFinGeom.computeVertexNormals();
 
-    // Anal curtain
+    // Anal curtain (positioned at 0,0,0 so ox is exact body space X)
     const aPos = this.analFinGeom.attributes.position;
     const aOrig = this.analOriginalPositions;
     for (let i = 0; i < aPos.count; i++) {
@@ -1452,11 +1896,11 @@ export class BettaFish {
       const oy = aOrig[idx + 1];
       const oz = aOrig[idx + 2];
 
-      const bodyT = THREE.MathUtils.clamp((0.45 - (ox - 0.22)) / 1.63, 0, 1);
-      const spineZ = Math.sin(this.animTime * 3.1 - bodyT * 2.4) * 0.075 * bodyT * bodyT;
-      const tipRatio = THREE.MathUtils.clamp(Math.abs(oy) / 1.04, 0, 1);
+      const bodyT = THREE.MathUtils.clamp((0.40 - ox) / 1.56, 0, 1);
+      const spineZ = Math.sin(this.animTime * 3.1 - bodyT * 2.4) * spineAmp * bodyT * bodyT;
+      const tipRatio = THREE.MathUtils.clamp((-oy - 0.12) / 1.02, 0, 1);
 
-      const wave = Math.sin(this.animTime * 3.1 - 1.5 - tipRatio * 2.4 + ox * 1.6) * 0.18 * Math.pow(tipRatio, 1.3);
+      const wave = Math.sin(this.animTime * 3.1 - 1.5 - tipRatio * 2.4 + ox * 1.6) * 0.155 * sailWaveScale * Math.pow(tipRatio, 1.35);
       aPos.setXYZ(i, ox, oy, oz + spineZ + wave);
     }
     aPos.needsUpdate = true;
@@ -1477,11 +1921,11 @@ export class BettaFish {
         const ox = orig[idx];
         const oy = orig[idx + 1];
         const oz = orig[idx + 2];
-        const t = THREE.MathUtils.clamp(-oy / 1.05, 0, 1);
+        const t = THREE.MathUtils.clamp(-oy / 0.88, 0, 1);
 
-        const swayZ = Math.sin(this.animTime * 2.6 - t * 2.8 + m * 0.8) * 0.11 * t * t;
-        const sweepX = -this.velocity.length() * 0.12 * t * t;
-        const flareOut = this.flareIntensity * 0.12 * t * sideSign;
+        const swayZ = Math.sin(this.animTime * 2.6 - t * 2.8 + m * 0.8) * 0.09 * t * t;
+        const sweepX = -this.velocity.length() * 0.11 * t * t;
+        const flareOut = this.flareIntensity * 0.1 * t * sideSign;
 
         pos.setXYZ(i, ox + sweepX, oy, oz + swayZ + flareOut);
       }
@@ -1490,27 +1934,35 @@ export class BettaFish {
   }
 
   public swimTo(point: THREE.Vector3, isUrgent = false) {
+    this.returningHome = false;
+    this.isHovering = false;
+    this.hoverPauseTimer = 0;
     this.targetPosition.copy(point);
-    this.wanderTimer = 4.2;
-    this.isExcited = isUrgent;
+    this.wanderTimer = isUrgent ? 3.5 : 4.2;
     if (isUrgent) {
-      setTimeout(() => {
-        this.isExcited = false;
-      }, 3200);
+      this.isExcited = true;
+      this.excitedTimer = 3.2;
+    } else {
+      this.isExcited = false;
+      this.excitedTimer = 0;
     }
   }
 
   public triggerFlare(active: boolean) {
     this.isFlaring = active;
     if (active && !this.combatMode) {
-      // Swim front-and-center to show off flaring display!
+      this.returningHome = false;
+      this.isHovering = false;
       this.targetPosition.set(0, 0.1, 0.5);
       this.wanderTimer = 5.0;
     }
   }
 
-  public enterCombat(homePos: THREE.Vector3, facing: number) {
+  public enterCombat(homePos: THREE.Vector3, facing: number, previewOnly = false) {
     this.combatMode = true;
+    this.combatPreview = previewOnly;
+    this.returningHome = false;
+    this.isHovering = false;
     this.isFlaring = true;
     this.combatHomePos.copy(homePos);
     this.combatFacing = facing;
@@ -1520,13 +1972,24 @@ export class BettaFish {
     this.combatGuardActive = false;
   }
 
+  public setCombatPreview(previewOnly: boolean) {
+    this.combatPreview = previewOnly;
+  }
+
   public exitCombat(aquariumReturnPos: THREE.Vector3) {
     this.combatMode = false;
+    this.combatPreview = false;
     this.isFlaring = false;
     this.combatGuardActive = false;
+    this.mouthAnticipate = 0;
     if (this.shieldMesh) this.shieldMesh.visible = false;
+    this.returningHome = true;
+    this.isHovering = false;
+    this.hoverPauseTimer = 0;
+    this.isExcited = false;
+    this.excitedTimer = 0;
     this.targetPosition.copy(aquariumReturnPos);
-    this.wanderTimer = 3.5;
+    this.wanderTimer = 8.0;
   }
 
   public triggerCombatStrike(dirX: number, power: 'light' | 'heavy' | 'ultimate') {
@@ -1558,6 +2021,7 @@ export class BettaFish {
     this.shieldMesh.geometry.dispose();
     this.shieldMaterial.dispose();
     this.bodyMaterial.dispose();
+    this.headMaterial.dispose();
     this.caudalMaterial.dispose();
     this.sailMaterial.dispose();
     this.pectoralMaterial.dispose();
@@ -1565,12 +2029,17 @@ export class BettaFish {
     this.irisMaterial.dispose();
     this.corneaMaterial.dispose();
     this.pupilMaterial.dispose();
+    this.eyeSparkMaterial.dispose();
     this.gillMembraneMaterial.dispose();
     this.goldMaterial.dispose();
     this.bodyTexture.dispose();
     this.scaleNormalTexture.dispose();
     this.caudalTexture.dispose();
+    this.caudalNormalTexture.dispose();
     this.sailTexture.dispose();
+    this.sailNormalTexture.dispose();
     this.pectoralTexture.dispose();
+    this.pelvicTexture.dispose();
+    this.irisTexture.dispose();
   }
 }
