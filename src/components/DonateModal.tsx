@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { X, Sparkles, Check, Copy, Crown } from 'lucide-react';
+import { X, Check, Copy, Crown } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { DONATION_TIERS } from '../services/storage';
 import { DonationTier, FishStats } from '../types';
@@ -17,11 +17,10 @@ interface DonateModalProps {
 }
 
 export const DonateModal: React.FC<DonateModalProps> = ({
-  stats,
   onClose,
   onApplyDonation,
 }) => {
-  const [selectedTier, setSelectedTier] = useState<DonationTier>(DONATION_TIERS[1]); // Default to Patron
+  const [selectedTier, setSelectedTier] = useState<DonationTier>(DONATION_TIERS[1]);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [customAmount, setCustomAmount] = useState<string>('300');
   const [activeTab, setActiveTab] = useState<'tiers' | 'methods'>('tiers');
@@ -35,8 +34,6 @@ export const DonateModal: React.FC<DonateModalProps> = ({
 
   const handleDemoActivate = (tier: DonationTier) => {
     retroAudio.playFanfare();
-    
-    // Celebratory Confetti explosion!
     try {
       confetti({
         particleCount: 80,
@@ -50,22 +47,21 @@ export const DonateModal: React.FC<DonateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-black/85 select-none">
-      <div className="arcade-panel border-4 border-[#c084fc] w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
-        
-        {/* Header */}
-        <div className="bg-[#1c1033] px-4 py-3 flex items-center justify-between border-b-2 border-[#c084fc]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-md bg-[#eab308] border-2 border-[#fef08a] text-black flex items-center justify-center shadow font-black text-xs">
-              VIP
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 select-none">
+      <div className="glass-panel w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Clean Header */}
+        <div className="px-4 py-3.5 sm:px-6 sm:py-4 flex items-center justify-between border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-fuchsia-500/15 border border-fuchsia-400/35 text-fuchsia-300 flex items-center justify-center">
+              <Crown className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-[#fef08a] tracking-wide">
-                VIP КЛУБ & ПОДДЕРЖКА
+              <h2 className="font-display font-bold text-base sm:text-lg text-white leading-tight">
+                VIP Клуб и поддержка
               </h2>
-              <div className="text-[11px] font-mono text-purple-200">
-                Корона для рыбки, золотые темы и бонус x2
-              </div>
+              <p className="text-xs text-slate-400">
+                Золотая корона, бонус x2 наград на арене и эксклюзивные темы
+              </p>
             </div>
           </div>
 
@@ -76,209 +72,202 @@ export const DonateModal: React.FC<DonateModalProps> = ({
               retroAudio.playBlip(400, 0.04);
             }}
             aria-label="Закрыть VIP клуб"
-            className="arcade-btn bg-[#272744] hover:bg-[#383862] border-[#a855f7] text-white p-1.5"
+            className="ui-btn bg-slate-800/80 hover:bg-slate-700 border-white/15 text-slate-200 p-2 rounded-xl"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Unified Tab switcher */}
-        <div className="grid grid-cols-2 gap-2 p-2.5 border-b-2 border-[#4c1d95] bg-[#0b0918]">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('tiers');
-              retroAudio.playBlip(550, 0.03);
-            }}
-            className={`arcade-btn py-2 px-3 text-xs ${
-              activeTab === 'tiers'
-                ? 'bg-[#c084fc] border-[#f3e8ff] text-black'
-                : 'bg-[#171230] border-[#4c1d95] text-[#cbd5e1] hover:border-[#a855f7]'
-            }`}
-          >
-            ⭐ Тарифы VIP
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('methods');
-              retroAudio.playBlip(550, 0.03);
-            }}
-            className={`arcade-btn py-2 px-3 text-xs ${
-              activeTab === 'methods'
-                ? 'bg-[#c084fc] border-[#f3e8ff] text-black'
-                : 'bg-[#171230] border-[#4c1d95] text-[#cbd5e1] hover:border-[#a855f7]'
-            }`}
-          >
-            💳 Реквизиты оплаты
-          </button>
+        {/* Segmented Tab Switcher */}
+        <div className="px-4 pt-3 sm:px-6">
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-900/90 border border-white/10 rounded-xl">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('tiers');
+                retroAudio.playBlip(550, 0.03);
+              }}
+              className={`py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer ${
+                activeTab === 'tiers'
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Тарифы VIP
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('methods');
+                retroAudio.playBlip(550, 0.03);
+              }}
+              className={`py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer ${
+                activeTab === 'methods'
+                  ? 'bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Реквизиты
+            </button>
+          </div>
         </div>
 
         {/* Body */}
-        <div className="p-3 sm:p-5 overflow-y-auto space-y-4 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
           {activeTab === 'tiers' ? (
-            <>
-              {/* Promo banner */}
-              <div className="bg-[#1f113a] border-2 border-[#a855f7] rounded-xl p-3 flex items-center gap-3">
-                <Crown className="w-10 h-10 text-[#facc15] shrink-0" />
-                <div className="text-xs">
-                  <span className="font-bold text-[#fef08a] block">
-                    Поддержите развитие проекта и получите эксклюзивный статус!
-                  </span>
-                  <span className="text-[#d8b4fe]">
-                    Донат открывает золотую корону на 3D рыбке, уникальные фоны, x2 монет и статус Патрона навсегда.
-                  </span>
-                </div>
-              </div>
-
-              {/* Tiers List */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {DONATION_TIERS.map((tier) => {
-                  const isSelected = selectedTier.id === tier.id;
-                  return (
-                    <div
-                      key={tier.id}
-                      onClick={() => {
-                        setSelectedTier(tier);
-                        retroAudio.playBlip(600, 0.03);
-                      }}
-                      className={`p-3 rounded-xl border-2 flex flex-col justify-between cursor-pointer transition relative ${
-                        isSelected
-                          ? 'bg-[#2e1065] border-[#facc15] shadow-[0_0_15px_rgba(250,204,21,0.4)] scale-[1.01]'
-                          : 'bg-[#150f28] border-[#4c1d95] hover:border-[#9333ea]'
-                      }`}
-                    >
-                      {tier.isPopular && (
-                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-[#f59e0b] text-black font-black text-[9px] px-2 py-0.5 rounded-full shadow border border-black uppercase tracking-wider">
-                          Хит продаж
-                        </div>
-                      )}
-
-                      <div>
-                        <div className="text-xs font-['Press_Start_2P'] text-[#f0abfc] mb-1">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {DONATION_TIERS.map((tier) => {
+                const isSelected = selectedTier.id === tier.id;
+                return (
+                  <div
+                    key={tier.id}
+                    onClick={() => {
+                      setSelectedTier(tier);
+                      retroAudio.playBlip(600, 0.03);
+                    }}
+                    className={`p-4 rounded-2xl border flex flex-col justify-between cursor-pointer transition ${
+                      isSelected
+                        ? 'bg-slate-900/95 border-amber-400/65 shadow-[0_0_25px_rgba(251,191,36,0.14)]'
+                        : 'bg-slate-900/65 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-semibold text-fuchsia-300">
                           {tier.titleBadge}
-                        </div>
-                        <div className="text-base sm:text-lg font-black text-white mb-2">
-                          {tier.priceRub} ₽ <span className="text-xs text-[#94a3b8] font-normal font-mono">(${tier.priceUsd})</span>
-                        </div>
-
-                        <p className="text-[11px] text-[#cbd5e1] mb-2 leading-relaxed">
-                          {tier.description}
-                        </p>
-
-                        <div className="space-y-1 my-2 border-t border-[#4c1d95] pt-2">
-                          {tier.benefits.map((b, i) => (
-                            <div key={i} className="text-[10px] text-[#e9d5ff] flex items-center gap-1">
-                              <Sparkles className="w-2.5 h-2.5 text-[#facc15] shrink-0" />
-                              <span>{b}</span>
-                            </div>
-                          ))}
-                        </div>
+                        </span>
+                        {tier.isPopular && (
+                          <span className="text-[11px] font-semibold text-amber-300">
+                            Популярный
+                          </span>
+                        )}
                       </div>
 
-                      <div className="mt-3 pt-2 border-t border-[#4c1d95]">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDemoActivate(tier);
-                          }}
-                          className="arcade-btn w-full py-2 px-3 bg-[#eab308] hover:bg-[#facc15] border-[#fef08a] text-black text-xs"
-                        >
-                          Активировать
-                        </button>
+                      <div className="font-display text-2xl font-extrabold text-white mb-1.5 tabular-nums">
+                        {tier.priceRub} ₽{' '}
+                        <span className="text-xs text-slate-400 font-normal font-mono">
+                          (${tier.priceUsd})
+                        </span>
                       </div>
+
+                      <p className="text-xs text-slate-300 mb-3 leading-relaxed">
+                        {tier.description}
+                      </p>
+
+                      <ul className="space-y-1.5 border-t border-white/10 pt-3 mb-4">
+                        {tier.benefits.map((b, i) => (
+                          <li key={i} className="text-xs text-slate-200 flex items-start gap-2">
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                  );
-                })}
-              </div>
 
-              {/* Instant Test Activation Notice */}
-              <div className="p-3 bg-[#171329] rounded-lg border border-[#6b21a8] flex items-center justify-between gap-3">
-                <div className="text-[11px] text-[#c084fc]">
-                  ✨ Кнопка «ПОДДЕРЖАТЬ» сразу активирует выбранный VIP-пакет (бонусные жемчужины, монеты и золотой статус), чтобы вы могли протестировать все возможности прямо сейчас!
-                </div>
-              </div>
-            </>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDemoActivate(tier);
+                      }}
+                      className="ui-btn w-full py-2.5 px-4 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 border-amber-200/50 text-slate-950 font-bold text-xs"
+                    >
+                      Активировать
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
-            /* Methods Tab */
             <div className="space-y-3">
-              <p className="text-xs text-[#d8b4fe]">
-                Если вы хотите реально поддержать автора проекта, вы можете использовать следующие реквизиты:
+              <p className="text-xs text-slate-300">
+                Прямые реквизиты для поддержки развития проекта:
               </p>
 
-              {/* SBP / Card */}
-              <div className="p-3 bg-[#19142f] border border-[#7e22ce] rounded-xl flex items-center justify-between">
+              <div className="p-3.5 bg-slate-900/75 border border-white/10 rounded-2xl flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                    💳 Банковская карта / СБП (Россия)
+                  <div className="text-xs font-semibold text-white">
+                    Банковская карта / СБП (Россия)
                   </div>
-                  <div className="text-xs font-mono text-[#facc15] mt-1">
+                  <div className="text-xs font-mono text-amber-300 mt-1">
                     +7 (999) 000-00-00 (Т-Банк / Сбер)
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => copyToClipboard('+79990000000', 'sbp')}
-                  className="px-3 py-1.5 bg-[#4c1d95] hover:bg-[#6b21a8] text-white rounded text-xs font-mono flex items-center gap-1 transition"
+                  className="ui-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs"
                 >
-                  {copiedKey === 'sbp' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedKey === 'sbp' ? 'Скопировано!' : 'Копировать'}</span>
+                  {copiedKey === 'sbp' ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  <span>{copiedKey === 'sbp' ? 'Скопировано' : 'Копировать'}</span>
                 </button>
               </div>
 
-              {/* Boosty / CloudTips */}
-              <div className="p-3 bg-[#19142f] border border-[#7e22ce] rounded-xl flex items-center justify-between">
+              <div className="p-3.5 bg-slate-900/75 border border-white/10 rounded-2xl flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                    ☕ Boosty / CloudTips (Любые карты мира)
+                  <div className="text-xs font-semibold text-white">
+                    Boosty / CloudTips
                   </div>
-                  <div className="text-xs font-mono text-[#93c5fd] mt-1">
+                  <div className="text-xs font-mono text-sky-300 mt-1">
                     https://boosty.to/betta_tamagotchi
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => copyToClipboard('https://boosty.to/betta_tamagotchi', 'boosty')}
-                  className="px-3 py-1.5 bg-[#4c1d95] hover:bg-[#6b21a8] text-white rounded text-xs font-mono flex items-center gap-1 transition"
+                  className="ui-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs"
                 >
-                  {copiedKey === 'boosty' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedKey === 'boosty' ? 'Скопировано!' : 'Копировать'}</span>
+                  {copiedKey === 'boosty' ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  <span>{copiedKey === 'boosty' ? 'Скопировано' : 'Копировать'}</span>
                 </button>
               </div>
 
-              {/* Crypto USDT / TON */}
-              <div className="p-3 bg-[#19142f] border border-[#7e22ce] rounded-xl flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                    💎 USDT (TRC-20) / TON
+              <div className="p-3.5 bg-slate-900/75 border border-white/10 rounded-2xl flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white">
+                    USDT (TRC-20) / TON
                   </div>
-                  <div className="text-xs font-mono text-[#a7f3d0] mt-1 truncate max-w-[220px] sm:max-w-xs">
+                  <div className="text-xs font-mono text-emerald-300 mt-1 truncate max-w-[220px] sm:max-w-xs">
                     TYh6zK2b7bV4m9KqP1sD7uVw8zY3rX8nLq
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => copyToClipboard('TYh6zK2b7bV4m9KqP1sD7uVw8zY3rX8nLq', 'crypto')}
-                  className="px-3 py-1.5 bg-[#4c1d95] hover:bg-[#6b21a8] text-white rounded text-xs font-mono flex items-center gap-1 transition"
+                  className="ui-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs shrink-0"
                 >
-                  {copiedKey === 'crypto' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedKey === 'crypto' ? 'Скопировано!' : 'Копировать'}</span>
+                  {copiedKey === 'crypto' ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  <span>{copiedKey === 'crypto' ? 'Скопировано' : 'Копировать'}</span>
                 </button>
               </div>
 
-              {/* Custom amount */}
-              <div className="p-3 bg-[#150f28] border border-[#6b21a8] rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="text-xs text-[#cbd5e1]">
-                  Произвольная сумма на кофе автору:
+              <div className="p-3.5 bg-slate-900/60 border border-white/10 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="text-xs text-slate-300">
+                  Произвольная поддержка проекта:
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     value={customAmount}
                     onChange={(e) => setCustomAmount(e.target.value)}
-                    className="w-24 bg-[#0a0715] border border-[#9333ea] rounded px-2 py-1 text-xs font-mono text-[#fde047] text-center"
+                    className="w-24 bg-slate-950 border border-white/15 rounded-xl px-2.5 py-1.5 text-xs font-mono text-amber-300 text-center outline-none focus:border-cyan-400"
                     placeholder="Рубли"
                   />
-                  <span className="text-xs font-mono">₽</span>
+                  <span className="text-xs font-mono text-slate-400">₽</span>
                   <button
+                    type="button"
                     onClick={() => {
                       const amount = parseInt(customAmount) || 100;
                       handleDemoActivate({
@@ -289,12 +278,12 @@ export const DonateModal: React.FC<DonateModalProps> = ({
                         priceUsd: Math.round(amount / 80),
                         pearlsAwarded: Math.round(amount * 0.7),
                         coinsAwarded: amount * 12,
-                        titleBadge: '💖 Спонсор',
+                        titleBadge: 'Спонсор',
                         description: `Донат на сумму ${amount}₽`,
                         benefits: [`+${Math.round(amount * 0.7)} жемчужин`, `+${amount * 12} монет`],
                       });
                     }}
-                    className="px-3 py-1.5 bg-[#eab308] hover:bg-[#facc15] text-black font-bold rounded text-xs transition"
+                    className="ui-btn px-3.5 py-2 bg-amber-400 hover:bg-amber-300 border-amber-200/40 text-slate-950 font-bold text-xs"
                   >
                     Отправить
                   </button>
@@ -303,13 +292,6 @@ export const DonateModal: React.FC<DonateModalProps> = ({
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <div className="p-3 bg-[#080512] border-t-2 border-[#4c1d95] flex items-center justify-between text-[11px] font-mono text-[#a855f7]">
-          <span>© 1996 FAMICOM BETTA SYSTEM</span>
-          <span className="text-[#facc15] font-bold">СПАСИБО ЗА ПОДДЕРЖКУ! Arigatou!</span>
-        </div>
-
       </div>
     </div>
   );

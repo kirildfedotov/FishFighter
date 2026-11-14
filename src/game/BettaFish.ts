@@ -201,6 +201,17 @@ export class BettaFish {
   public currentSkinId: FishColorPalette = 'royal_blue';
   private isSoftwareGl: boolean = false;
 
+  // PvP Combat Choreography states
+  public combatMode: boolean = false;
+  private combatHomePos: THREE.Vector3 = new THREE.Vector3();
+  private combatFacing: number = 0;
+  private combatDashOffset: THREE.Vector3 = new THREE.Vector3();
+  private combatRecoil: number = 0;
+  private combatSpin: number = 0;
+  private shieldMesh!: THREE.Mesh;
+  private shieldMaterial!: THREE.MeshBasicMaterial;
+  private combatGuardActive: boolean = false;
+
   constructor(skinId: FishColorPalette = 'tropical_paradise', isSoftwareGl = false) {
     this.isSoftwareGl = isSoftwareGl;
     this.group = new THREE.Group();
@@ -215,12 +226,30 @@ export class BettaFish {
     this.buildEyes();
     this.buildShowFins();
     this.buildVipCrown();
+    this.buildCombatShield();
     this.updateSkin(skinId);
 
     this.fishRoot.scale.setScalar(0.56);
     this.group.add(this.fishRoot);
     this.fishRoot.add(this.vipCrownGroup);
     this.vipCrownGroup.visible = false;
+  }
+
+  private buildCombatShield() {
+    const geom = new THREE.SphereGeometry(1.45, 22, 16);
+    this.shieldMaterial = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.24,
+      wireframe: false,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.shieldMesh = new THREE.Mesh(geom, this.shieldMaterial);
+    this.shieldMesh.position.set(-0.35, 0, 0);
+    this.shieldMesh.visible = false;
+    this.fishRoot.add(this.shieldMesh);
   }
 
   private initTextures(palette: PaletteColors) {
@@ -1172,59 +1201,115 @@ export class BettaFish {
     delta: number,
     boundBox: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number }
   ) {
-    const speedMult = this.isFlaring ? 4.4 : this.isExcited ? 3.8 : 2.3;
+    const speedMult = this.combatMode ? 5.2 : this.isFlaring ? 4.4 : this.isExcited ? 3.8 : 2.3;
     this.animTime += delta * speedMult;
 
-    // 1. Graceful Natural Cruising Pathfinding (prefers broadside showcase angles)
-    this.wanderTimer -= delta;
-    if (this.wanderTimer <= 0) {
-      this.wanderTimer = 3.2 + Math.random() * 3.8;
-      const marginX = 0.65;
-      const marginY = 0.55;
-      // Keep Z closer to 0 so the full broadside silhouette & flowing fins shine
-      const zRange = this.isFlaring ? 0.35 : 0.9;
-      this.targetPosition.set(
-        THREE.MathUtils.randFloat(boundBox.minX + marginX, boundBox.maxX - marginX),
-        THREE.MathUtils.randFloat(boundBox.minY + marginY + 0.25, boundBox.maxY - marginY),
-        THREE.MathUtils.randFloat(-zRange, zRange)
+    if (this.combatMode) {
+      // PvP Arena combat positioning: spring toward stance + strike dash + recoil
+      const hoverX = Math.sin(this.animTime * 0.65) * 0.09;
+      const hoverY = Math.cos(this.animTime * 0.85) * 0.08 + (this.combatGuardActive ? 0.14 : 0);
+
+      _toTarget.set(
+        this.combatHomePos.x + this.combatDashOffset.x + hoverX,
+        this.combatHomePos.y + this.combatDashOffset.y + hoverY,
+        this.combatHomePos.z + this.combatDashOffset.z
       );
-    }
 
-    _toTarget.subVectors(this.targetPosition, this.currentPosition);
-    const dist = _toTarget.length();
-    const targetSpeed = this.isSleeping
-      ? 0.22
-      : this.isFlaring
-      ? 0.35
-      : this.isExcited
-      ? 1.55
-      : this.swimSpeed;
+      this.currentPosition.x = THREE.MathUtils.damp(this.currentPosition.x, _toTarget.x, 8.5, delta);
+      this.currentPosition.y = THREE.MathUtils.damp(this.currentPosition.y, _toTarget.y, 8.5, delta);
+      this.currentPosition.z = THREE.MathUtils.damp(this.currentPosition.z, _toTarget.z, 8.5, delta);
 
-    if (dist > 0.08) {
-      _toTarget.normalize();
-      // Gently slow down as fish arrives near target
-      const arriveScale = THREE.MathUtils.clamp(dist / 0.8, 0.25, 1.0);
-      _desiredVel.copy(_toTarget).multiplyScalar(targetSpeed * arriveScale);
-      this.velocity.lerp(_desiredVel, 1 - Math.exp(-3.0 * delta));
-      this.currentPosition.addScaledVector(this.velocity, delta);
+      this.combatDashOffset.x = THREE.MathUtils.damp(this.combatDashOffset.x, 0, 5.2, delta);
+      this.combatDashOffset.y = THREE.MathUtils.damp(this.combatDashOffset.y, 0, 5.2, delta);
+      this.combatDashOffset.z = THREE.MathUtils.damp(this.combatDashOffset.z, 0, 5.2, delta);
 
-      const speedNow = this.velocity.length();
-      if (speedNow > 0.03) {
-        const targetHeading = Math.atan2(-this.velocity.z, this.velocity.x);
-        const headingDelta = shortestAngleDiff(this.headingAngle, targetHeading);
-        this.headingAngle += headingDelta * (1 - Math.exp(-3.6 * delta));
-
-        const targetPitch = Math.asin(
-          THREE.MathUtils.clamp(this.velocity.y / (speedNow + 0.05), -0.65, 0.65)
-        );
-        this.pitchAngle = THREE.MathUtils.damp(this.pitchAngle, targetPitch, 3.2, delta);
-
-        const targetRoll = THREE.MathUtils.clamp(headingDelta * 0.45, -0.28, 0.28);
-        this.rollAngle = THREE.MathUtils.damp(this.rollAngle, targetRoll, 3.0, delta);
+      this.combatRecoil = THREE.MathUtils.damp(this.combatRecoil, 0, 6.0, delta);
+      if (this.combatSpin > 0.01) {
+        this.combatSpin = THREE.MathUtils.damp(this.combatSpin, 0, 6.8, delta);
+      } else {
+        this.combatSpin = 0;
       }
+
+      const headingDelta = shortestAngleDiff(this.headingAngle, this.combatFacing);
+      this.headingAngle += headingDelta * (1 - Math.exp(-8.0 * delta));
+      this.pitchAngle = THREE.MathUtils.damp(
+        this.pitchAngle,
+        this.combatRecoil * 0.35 + this.combatDashOffset.y * 0.3,
+        8.0,
+        delta
+      );
+      this.rollAngle = THREE.MathUtils.damp(
+        this.rollAngle,
+        this.combatRecoil * 0.55 * Math.sin(this.animTime * 4) + this.combatSpin,
+        8.0,
+        delta
+      );
 
       this.group.position.copy(this.currentPosition);
       this.group.rotation.set(this.rollAngle, this.headingAngle, this.pitchAngle, 'ZYX');
+
+      if (this.shieldMesh) {
+        this.shieldMesh.visible = this.combatGuardActive;
+        if (this.combatGuardActive) {
+          const pulse = 1.0 + Math.sin(this.animTime * 2.5) * 0.05;
+          this.shieldMesh.scale.setScalar(pulse);
+          this.shieldMesh.rotation.y += delta * 1.8;
+        }
+      }
+    } else {
+      if (this.shieldMesh) this.shieldMesh.visible = false;
+
+      // 1. Graceful Natural Cruising Pathfinding (prefers broadside showcase angles)
+      this.wanderTimer -= delta;
+      if (this.wanderTimer <= 0) {
+        this.wanderTimer = 3.2 + Math.random() * 3.8;
+        const marginX = 0.65;
+        const marginY = 0.55;
+        // Keep Z closer to 0 so the full broadside silhouette & flowing fins shine
+        const zRange = this.isFlaring ? 0.35 : 0.9;
+        this.targetPosition.set(
+          THREE.MathUtils.randFloat(boundBox.minX + marginX, boundBox.maxX - marginX),
+          THREE.MathUtils.randFloat(boundBox.minY + marginY + 0.25, boundBox.maxY - marginY),
+          THREE.MathUtils.randFloat(-zRange, zRange)
+        );
+      }
+
+      _toTarget.subVectors(this.targetPosition, this.currentPosition);
+      const dist = _toTarget.length();
+      const targetSpeed = this.isSleeping
+        ? 0.22
+        : this.isFlaring
+        ? 0.35
+        : this.isExcited
+        ? 1.55
+        : this.swimSpeed;
+
+      if (dist > 0.08) {
+        _toTarget.normalize();
+        // Gently slow down as fish arrives near target
+        const arriveScale = THREE.MathUtils.clamp(dist / 0.8, 0.25, 1.0);
+        _desiredVel.copy(_toTarget).multiplyScalar(targetSpeed * arriveScale);
+        this.velocity.lerp(_desiredVel, 1 - Math.exp(-3.0 * delta));
+        this.currentPosition.addScaledVector(this.velocity, delta);
+
+        const speedNow = this.velocity.length();
+        if (speedNow > 0.03) {
+          const targetHeading = Math.atan2(-this.velocity.z, this.velocity.x);
+          const headingDelta = shortestAngleDiff(this.headingAngle, targetHeading);
+          this.headingAngle += headingDelta * (1 - Math.exp(-3.6 * delta));
+
+          const targetPitch = Math.asin(
+            THREE.MathUtils.clamp(this.velocity.y / (speedNow + 0.05), -0.65, 0.65)
+          );
+          this.pitchAngle = THREE.MathUtils.damp(this.pitchAngle, targetPitch, 3.2, delta);
+
+          const targetRoll = THREE.MathUtils.clamp(headingDelta * 0.45, -0.28, 0.28);
+          this.rollAngle = THREE.MathUtils.damp(this.rollAngle, targetRoll, 3.0, delta);
+        }
+
+        this.group.position.copy(this.currentPosition);
+        this.group.rotation.set(this.rollAngle, this.headingAngle, this.pitchAngle, 'ZYX');
+      }
     }
 
     // 2. Gill Breathing & Mirror Flare Animation
@@ -1417,11 +1502,50 @@ export class BettaFish {
 
   public triggerFlare(active: boolean) {
     this.isFlaring = active;
-    if (active) {
+    if (active && !this.combatMode) {
       // Swim front-and-center to show off flaring display!
       this.targetPosition.set(0, 0.1, 0.5);
       this.wanderTimer = 5.0;
     }
+  }
+
+  public enterCombat(homePos: THREE.Vector3, facing: number) {
+    this.combatMode = true;
+    this.isFlaring = true;
+    this.combatHomePos.copy(homePos);
+    this.combatFacing = facing;
+    this.combatDashOffset.set(0, 0, 0);
+    this.combatRecoil = 0;
+    this.combatSpin = 0;
+    this.combatGuardActive = false;
+  }
+
+  public exitCombat(aquariumReturnPos: THREE.Vector3) {
+    this.combatMode = false;
+    this.isFlaring = false;
+    this.combatGuardActive = false;
+    if (this.shieldMesh) this.shieldMesh.visible = false;
+    this.targetPosition.copy(aquariumReturnPos);
+    this.wanderTimer = 3.5;
+  }
+
+  public triggerCombatStrike(dirX: number, power: 'light' | 'heavy' | 'ultimate') {
+    this.combatDashOffset.x = dirX * (power === 'ultimate' ? 2.1 : power === 'heavy' ? 1.55 : 1.15);
+    this.combatDashOffset.y = power === 'heavy' ? 0.14 : 0.04;
+    this.triggerGulp();
+    if (power === 'ultimate') {
+      this.combatSpin = Math.PI * 2;
+    }
+  }
+
+  public triggerCombatHit(pushDirX: number) {
+    this.combatRecoil = 1.0;
+    this.combatDashOffset.x = pushDirX * 0.55;
+    this.combatDashOffset.y = 0.18;
+  }
+
+  public setCombatGuard(active: boolean) {
+    this.combatGuardActive = active;
   }
 
   public dispose() {
@@ -1431,6 +1555,8 @@ export class BettaFish {
     this.analFinGeom.dispose();
     this.leftPelvicGeom.dispose();
     this.rightPelvicGeom.dispose();
+    this.shieldMesh.geometry.dispose();
+    this.shieldMaterial.dispose();
     this.bodyMaterial.dispose();
     this.caudalMaterial.dispose();
     this.sailMaterial.dispose();

@@ -9,9 +9,9 @@ import { RetroHeader } from './components/RetroHeader';
 import { ActionDock } from './components/ActionDock';
 import { ShopModal } from './components/ShopModal';
 import { DonateModal } from './components/DonateModal';
-import { MiniGameModal } from './components/MiniGameModal';
 import { MirrorModal } from './components/MirrorModal';
 import { SplashScreen } from './components/SplashScreen';
+import { FighterOverlay, RIVAL_ROSTER } from './components/FighterOverlay';
 import { loadFishStats, saveFishStats, FOOD_ITEMS, FISH_SKINS, AQUARIUM_THEMES } from './services/storage';
 import { FishStats, FoodType, FishColorPalette, AquariumThemeId, DonationTier } from './types';
 import { AquariumScene } from './game/AquariumScene';
@@ -41,15 +41,18 @@ function applyExperience(prev: FishStats, expGain: number): {
 
 export default function App() {
   const [stats, setStats] = useState<FishStats>(loadFishStats);
-  const [crtEnabled, setCrtEnabled] = useState(true);
+  const [crtEnabled, setCrtEnabled] = useState(false);
   const [bgmActive, setBgmActive] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
 
+  // PvP Fighter Arena Mode
+  const [fighterMode, setFighterMode] = useState(false);
+  const [rivalIndex, setRivalIndex] = useState(0);
+
   // Modals
   const [showShop, setShowShop] = useState(false);
   const [showDonate, setShowDonate] = useState(false);
-  const [showMiniGame, setShowMiniGame] = useState(false);
   const [showMirror, setShowMirror] = useState(false);
 
   // Notification Toast
@@ -59,28 +62,24 @@ export default function App() {
   const sceneRef = useRef<AquariumScene | null>(null);
   const prevLevelRef = useRef(stats.level);
 
-  // Auto-save stats to localStorage
   useEffect(() => {
     saveFishStats(stats);
   }, [stats]);
 
-  // Announce level-ups cleanly outside setState updaters
   useEffect(() => {
     if (stats.level > prevLevelRef.current) {
       retroAudio.playFanfare();
-      showToast(`🎉 УРОВЕНЬ ПОВЫШЕН! Теперь уровень ${stats.level}!`);
+      showToast(`Уровень повышен! Теперь уровень ${stats.level}`);
     }
     prevLevelRef.current = stats.level;
   }, [stats.level]);
 
-  // Cleanup toast timer on unmount
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
   }, []);
 
-  // Periodic stat gentle decay & level check
   useEffect(() => {
     const interval = setInterval(() => {
       setStats((prev) => {
@@ -97,7 +96,7 @@ export default function App() {
           health: newHealth,
         };
       });
-    }, 45000); // Check every 45s
+    }, 45000);
 
     return () => clearInterval(interval);
   }, []);
@@ -107,14 +106,13 @@ export default function App() {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     toastTimeoutRef.current = window.setTimeout(() => {
       setToastMessage(null);
-    }, 3500);
+    }, 3200);
   };
 
-  // Action: Feed
   const handleFeed = (foodType: FoodType) => {
     const food = FOOD_ITEMS.find((f) => f.id === foodType) || FOOD_ITEMS[0];
     if (stats.coins < food.priceCoins) {
-      showToast('Недостаточно монет для этого корма! 🪙');
+      showToast('Недостаточно монет для этого корма');
       retroAudio.playBlip(200, 0.1);
       return;
     }
@@ -130,10 +128,9 @@ export default function App() {
       lastFedTimestamp: Date.now(),
     }));
 
-    showToast(`Рыбка устремилась к ${food.name}! 🍱`);
+    showToast(`Рыбка поплыла к корму «${food.name}»`);
   };
 
-  // Scene Callback when fish catches pellet
   const handleFishFed = (nutrition: number) => {
     setStats((prev) => {
       const nextHunger = Math.min(100, prev.hunger + nutrition);
@@ -151,7 +148,6 @@ export default function App() {
     });
   };
 
-  // Action: Clean
   const handleClean = () => {
     retroAudio.playSplash();
     sceneRef.current?.triggerCleanBurst();
@@ -172,29 +168,68 @@ export default function App() {
       };
     });
 
-    showToast('Стекло начищено до блеска, вода кристальная! 🧼 (+10 🪙)');
+    showToast('Вода кристально чистая (+10 🪙)');
+  };
+
+  const enterFighterArena = () => {
+    const rival = RIVAL_ROSTER[rivalIndex % RIVAL_ROSTER.length];
+    setShowShop(false);
+    setShowDonate(false);
+    setShowMirror(false);
+    setFighterMode(true);
+    retroAudio.playFlare();
+    sceneRef.current?.enterFighterMode(rival.skin, Boolean(rival.isVip));
+  };
+
+  const exitFighterArena = () => {
+    setFighterMode(false);
+    sceneRef.current?.exitFighterMode();
+  };
+
+  const handleSelectRival = (nextIndex: number) => {
+    setRivalIndex(nextIndex);
+    const rival = RIVAL_ROSTER[nextIndex % RIVAL_ROSTER.length];
+    sceneRef.current?.setOpponentSkin(rival.skin, Boolean(rival.isVip));
+  };
+
+  const handleFighterMatchEnd = (won: boolean, coins: number, pearls: number, exp: number) => {
+    setStats((prev) => {
+      const expResult = applyExperience(prev, exp);
+      return {
+        ...prev,
+        coins: prev.coins + coins,
+        pearls: prev.pearls + pearls,
+        happiness: Math.min(100, prev.happiness + (won ? 15 : 5)),
+        totalPlays: prev.totalPlays + 1,
+        ...expResult,
+      };
+    });
   };
 
   const handleFeedRef = useRef(handleFeed);
   const handleCleanRef = useRef(handleClean);
+  const enterFighterRef = useRef(enterFighterArena);
+  const exitFighterRef = useRef(exitFighterArena);
   handleFeedRef.current = handleFeed;
   handleCleanRef.current = handleClean;
+  enterFighterRef.current = enterFighterArena;
+  exitFighterRef.current = exitFighterArena;
 
-  // Keyboard hotkeys
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       if (e.key === 'Escape') {
+        if (fighterMode) {
+          exitFighterRef.current();
+        }
         setShowShop(false);
         setShowDonate(false);
-        setShowMiniGame(false);
         setShowMirror(false);
         return;
       }
 
-      // Do not trigger global hotkeys while splash, mini-game or modals are open
-      if (showSplash || showMiniGame || showShop || showDonate || showMirror) return;
+      if (showSplash || fighterMode || showShop || showDonate || showMirror) return;
 
       switch (e.key.toLowerCase()) {
         case '1':
@@ -211,7 +246,7 @@ export default function App() {
           break;
         case '4':
         case 'g':
-          setShowMiniGame(true);
+          enterFighterRef.current();
           break;
         case '5':
         case 's':
@@ -226,9 +261,8 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSplash, showMiniGame, showShop, showDonate, showMirror]);
+  }, [showSplash, fighterMode, showShop, showDonate, showMirror]);
 
-  // Tap glass
   const handleFishTapped = () => {
     setStats((prev) => ({
       ...prev,
@@ -237,7 +271,6 @@ export default function App() {
     }));
   };
 
-  // Shop purchase skin
   const handleBuySkin = (skinId: FishColorPalette, priceCoins: number, pricePearls: number) => {
     setStats((prev) => ({
       ...prev,
@@ -246,16 +279,14 @@ export default function App() {
       unlockedSkins: [...prev.unlockedSkins, skinId],
       skin: skinId,
     }));
-    showToast(`Приобретен новый окрас: ${FISH_SKINS[skinId]?.name}! 🐟`);
+    showToast(`Приобретён окрас: ${FISH_SKINS[skinId]?.name}`);
   };
 
-  // Shop equip skin
   const handleEquipSkin = (skinId: FishColorPalette) => {
     setStats((prev) => ({ ...prev, skin: skinId }));
-    showToast(`Окрас изменен на ${FISH_SKINS[skinId]?.name}!`);
+    showToast(`Выбран окрас: ${FISH_SKINS[skinId]?.name}`);
   };
 
-  // Shop purchase theme
   const handleBuyTheme = (themeId: AquariumThemeId, priceCoins: number, pricePearls: number) => {
     setStats((prev) => ({
       ...prev,
@@ -264,16 +295,14 @@ export default function App() {
       unlockedThemes: [...prev.unlockedThemes, themeId],
       theme: themeId,
     }));
-    showToast(`Разблокирована тема: ${AQUARIUM_THEMES[themeId]?.name}! ⛩️`);
+    showToast(`Открыта тема: ${AQUARIUM_THEMES[themeId]?.name}`);
   };
 
-  // Shop equip theme
   const handleEquipTheme = (themeId: AquariumThemeId) => {
     setStats((prev) => ({ ...prev, theme: themeId }));
-    showToast(`Тема аквариума изменена на ${AQUARIUM_THEMES[themeId]?.name}!`);
+    showToast(`Тема аквариума: ${AQUARIUM_THEMES[themeId]?.name}`);
   };
 
-  // Donation Tier applied
   const handleApplyDonation = (tier: DonationTier) => {
     setStats((prev) => {
       const isSuper = tier.id === 'tier_emperor';
@@ -285,8 +314,16 @@ export default function App() {
         isVip: true,
         coins: prev.coins + tier.coinsAwarded,
         pearls: prev.pearls + tier.pearlsAwarded,
-        unlockedSkins: isSuper ? allSkins : (prev.unlockedSkins.includes('golden_imperial') ? prev.unlockedSkins : [...prev.unlockedSkins, 'golden_imperial']),
-        unlockedThemes: isSuper ? allThemes : (prev.unlockedThemes.includes('golden_palace') ? prev.unlockedThemes : [...prev.unlockedThemes, 'golden_palace']),
+        unlockedSkins: isSuper
+          ? allSkins
+          : prev.unlockedSkins.includes('golden_imperial')
+          ? prev.unlockedSkins
+          : [...prev.unlockedSkins, 'golden_imperial'],
+        unlockedThemes: isSuper
+          ? allThemes
+          : prev.unlockedThemes.includes('golden_palace')
+          ? prev.unlockedThemes
+          : [...prev.unlockedThemes, 'golden_palace'],
         skin: 'golden_imperial',
         happiness: 100,
         energy: 100,
@@ -294,21 +331,9 @@ export default function App() {
     });
 
     setShowDonate(false);
-    showToast(`🌟 Активирован ${tier.titleBadge}! Золотая корона надета!`);
+    showToast(`Активирован ${tier.titleBadge} — золотая корона надета!`);
   };
 
-  // Reward from mini-game
-  const handleMiniGameReward = (coins: number, pearls: number) => {
-    setStats((prev) => ({
-      ...prev,
-      coins: prev.coins + coins,
-      pearls: prev.pearls + pearls,
-      happiness: Math.min(100, prev.happiness + 20),
-    }));
-    showToast(`Награда за игру: +${coins} 🪙 ${pearls > 0 ? `+${pearls} 🦪` : ''}!`);
-  };
-
-  // Mirror flare training complete
   const handleMirrorTrainingComplete = () => {
     setStats((prev) => {
       const nextHappy = 100;
@@ -323,68 +348,78 @@ export default function App() {
         totalPlays: prev.totalPlays + 1,
       };
     });
-    showToast('Петушок расправил плавники и полон царской энергии! 🪞 (+25 🪙)');
+    showToast('Тренировка завершена (+25 🪙, +35 EXP)');
   };
 
   return (
-    <div className="relative w-full h-dvh overflow-hidden bg-[#0a0a14] font-sans">
+    <div className="relative w-full h-dvh overflow-hidden bg-[#060913] font-sans">
       <div className="relative w-full h-full overflow-hidden">
-          
-          {/* 3D WebGL Canvas Viewport */}
-          <AquariumCanvas
-            skin={stats.skin}
-            theme={stats.theme}
-            isVip={stats.isVip}
-            cleanliness={stats.cleanliness}
-            onSceneReady={(scene) => {
-              sceneRef.current = scene;
-            }}
-            onFishFed={handleFishFed}
-            onFishTapped={handleFishTapped}
-          />
+        {/* 3D WebGL Canvas Viewport */}
+        <AquariumCanvas
+          skin={stats.skin}
+          theme={stats.theme}
+          isVip={stats.isVip}
+          cleanliness={stats.cleanliness}
+          onSceneReady={(scene) => {
+            sceneRef.current = scene;
+          }}
+          onFishFed={handleFishFed}
+          onFishTapped={handleFishTapped}
+        />
 
-          {/* 90s CRT Scanline Overlay */}
-          {crtEnabled && (
-            <div className="absolute inset-0 crt-overlay crt-vignette pointer-events-none z-10" />
-          )}
+        {/* Optional Subtle Screen Atmosphere Filter */}
+        {crtEnabled && (
+          <div className="absolute inset-0 crt-overlay crt-vignette pointer-events-none z-10" />
+        )}
 
-          {/* Top HUD Header */}
-          <RetroHeader
+        {/* Aquarium Mode HUD vs PvP Fighter Arena HUD */}
+        {!fighterMode ? (
+          <>
+            <RetroHeader
+              stats={stats}
+              onUpdateName={(name) => setStats((prev) => ({ ...prev, name }))}
+              crtEnabled={crtEnabled}
+              onToggleCrt={() => setCrtEnabled(!crtEnabled)}
+              bgmActive={bgmActive}
+              onToggleBgm={() => {
+                const active = retroAudio.toggleBGM();
+                setBgmActive(active);
+              }}
+              soundMuted={soundMuted}
+              onToggleMute={() => {
+                const nextMuted = !soundMuted;
+                retroAudio.setMuted(nextMuted);
+                setSoundMuted(nextMuted);
+              }}
+            />
+
+            <ActionDock
+              stats={stats}
+              onFeed={handleFeed}
+              onClean={handleClean}
+              onOpenMirror={() => setShowMirror(true)}
+              onEnterFighter={enterFighterArena}
+              onOpenShop={() => setShowShop(true)}
+              onOpenDonate={() => setShowDonate(true)}
+            />
+          </>
+        ) : (
+          <FighterOverlay
             stats={stats}
-            onUpdateName={(name) => setStats((prev) => ({ ...prev, name }))}
-            crtEnabled={crtEnabled}
-            onToggleCrt={() => setCrtEnabled(!crtEnabled)}
-            bgmActive={bgmActive}
-            onToggleBgm={() => {
-              const active = retroAudio.toggleBGM();
-              setBgmActive(active);
-            }}
-            soundMuted={soundMuted}
-            onToggleMute={() => {
-              const nextMuted = !soundMuted;
-              retroAudio.setMuted(nextMuted);
-              setSoundMuted(nextMuted);
-            }}
+            rivalIndex={rivalIndex}
+            onSelectRival={handleSelectRival}
+            onMove={(actor, kind) => sceneRef.current?.playFighterMove(actor, kind)}
+            onMatchEnd={handleFighterMatchEnd}
+            onExit={exitFighterArena}
           />
+        )}
 
-          {/* Notification Toast Message (Retro Pixel Banner) */}
-          {toastMessage && (
-            <div className="arcade-panel absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-40 border-[#facc15] text-[#fef08a] px-4 py-2 font-mono font-bold text-xs sm:text-sm max-w-[90vw] text-center select-none pointer-events-none">
-              {toastMessage}
-            </div>
-          )}
-
-          {/* Collapsible Unified Bottom Action Dock */}
-          <ActionDock
-            stats={stats}
-            onFeed={handleFeed}
-            onClean={handleClean}
-            onOpenMirror={() => setShowMirror(true)}
-            onOpenMiniGame={() => setShowMiniGame(true)}
-            onOpenShop={() => setShowShop(true)}
-            onOpenDonate={() => setShowDonate(true)}
-          />
-
+        {/* Modern Toast Notification */}
+        {toastMessage && !fighterMode && (
+          <div className="glass-panel absolute top-20 sm:top-24 left-1/2 -translate-x-1/2 z-40 border-cyan-400/35 text-slate-100 px-4 py-2 text-xs sm:text-sm font-medium max-w-[90vw] text-center select-none pointer-events-none">
+            {toastMessage}
+          </div>
+        )}
       </div>
 
       {/* Modals */}
@@ -407,14 +442,6 @@ export default function App() {
         />
       )}
 
-      {showMiniGame && (
-        <MiniGameModal
-          onClose={() => setShowMiniGame(false)}
-          onReward={handleMiniGameReward}
-          isVip={stats.isVip}
-        />
-      )}
-
       {showMirror && (
         <MirrorModal
           onClose={() => setShowMirror(false)}
@@ -427,7 +454,7 @@ export default function App() {
         />
       )}
 
-      {/* Initial FishFighter Arcade Splash Screen */}
+      {/* Initial FishFighter Splash Screen */}
       {showSplash && (
         <SplashScreen
           stats={stats}
@@ -440,7 +467,6 @@ export default function App() {
           }}
         />
       )}
-
     </div>
   );
 }

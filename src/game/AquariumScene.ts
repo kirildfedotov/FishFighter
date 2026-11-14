@@ -103,6 +103,36 @@ export class AquariumScene {
   private currentThemeId: AquariumThemeId = 'tokyo_neon_96';
   private cleanlinessLevel: number = 100;
 
+  // Fighter PvP Arena Mode (sits to the right at X = 12 so camera glide slides aquarium left)
+  private readonly arenaCenterX = 12.0;
+  public fighterMode: boolean = false;
+  private fighterBlend = 0;
+  public opponentFish!: BettaFish;
+  private arenaGroup: THREE.Group = new THREE.Group();
+  private arenaAnimatedNodes: { obj: THREE.Object3D; baseY: number; phase: number }[] = [];
+  private arenaCyanLight!: THREE.PointLight;
+  private arenaCrimsonLight!: THREE.PointLight;
+  private arenaBackRedLight!: THREE.PointLight;
+  private arenaAspectZ: number = 5.5;
+
+  // Pre-allocated Atmosphere Colors (zero GC in 60fps loop)
+  private themeWaterColor = new THREE.Color('#092747');
+  private themeFogColor = new THREE.Color('#092747');
+  private themeTopColor = new THREE.Color(0x38bdf8);
+  private themeRimColor = new THREE.Color(0xa5f3fc);
+  private themeTopIntensity = 2.2;
+  private themeFogDensity = 0.08;
+  private readonly themeHemiSkyColor = new THREE.Color(0xc7e9ff);
+  private readonly themeWaterSurfColor = new THREE.Color(0x38bdf8);
+
+  private readonly arenaWaterColor = new THREE.Color('#3b0714');
+  private readonly arenaFogColor = new THREE.Color('#24040c');
+  private readonly arenaTopColor = new THREE.Color(0xfb7185);
+  private readonly arenaRimColor = new THREE.Color(0xef4444);
+  private readonly arenaHemiSkyColor = new THREE.Color(0xfda4af);
+  private readonly arenaWaterSurfColor = new THREE.Color(0xf43f5e);
+  private readonly _blendColor = new THREE.Color();
+
   // Interactivity & Resize
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
@@ -125,6 +155,7 @@ export class AquariumScene {
     this.initFish(initialSkin);
     this.initDynamicCaustics();
     this.initAquariumWorld(initialTheme);
+    this.initFighterArena();
     this.initBubbles();
     this.initPlankton();
     this.initGodRays();
@@ -207,12 +238,13 @@ export class AquariumScene {
     }
     this.scene.add(this.keyLight);
 
-    this.waterTopLight = new THREE.SpotLight(0x7dd3fc, 2.2, 11, Math.PI / 2.8, 0.5, 1.4);
+    this.waterTopLight = new THREE.SpotLight(0x7dd3fc, 2.2, 12, Math.PI / 2.6, 0.5, 1.3);
     this.waterTopLight.position.set(0, 3.6, 0.8);
     this.scene.add(this.waterTopLight);
+    this.scene.add(this.waterTopLight.target);
 
     // Backlight to illuminate translucent silk Betta fins from behind!
-    this.rimLight = new THREE.PointLight(0xa5f3fc, 1.8, 9);
+    this.rimLight = new THREE.PointLight(0xa5f3fc, 1.8, 10);
     this.rimLight.position.set(-1.5, 0.8, -2.0);
     this.scene.add(this.rimLight);
 
@@ -225,6 +257,7 @@ export class AquariumScene {
     // Pull camera back on narrow portrait mobile screens so both grand scenery and fish shine
     const targetZ = aspect < 0.85 ? 6.6 : aspect < 1.1 ? 5.8 : 5.2;
     this.currentCameraPos.z = targetZ;
+    this.arenaAspectZ = aspect < 0.85 ? 7.2 : aspect < 1.1 ? 6.15 : 5.55;
   }
 
   private initFish(skinId: FishColorPalette) {
@@ -233,6 +266,12 @@ export class AquariumScene {
     this.fish.currentPosition.set(0, 0.18, 0.2);
     this.fish.targetPosition.set(0.25, 0.2, 0.25);
     this.scene.add(this.fish.group);
+
+    this.opponentFish = new BettaFish('ruby_dragon', this.isSoftwareGl);
+    this.opponentFish.group.position.set(this.arenaCenterX + 1.4, 0.22, 0.15);
+    this.opponentFish.currentPosition.set(this.arenaCenterX + 1.4, 0.22, 0.15);
+    this.opponentFish.group.visible = false;
+    this.scene.add(this.opponentFish.group);
   }
 
   private initDynamicCaustics() {
@@ -244,21 +283,21 @@ export class AquariumScene {
     this.causticTexture = new THREE.CanvasTexture(this.causticCanvas);
     this.causticTexture.wrapS = THREE.RepeatWrapping;
     this.causticTexture.wrapT = THREE.RepeatWrapping;
-    this.causticTexture.repeat.set(4, 3);
+    this.causticTexture.repeat.set(9, 4);
 
-    const causticGeom = new THREE.PlaneGeometry(14, 10);
+    const causticGeom = new THREE.PlaneGeometry(34, 12);
     causticGeom.rotateX(-Math.PI / 2);
 
     const causticMat = new THREE.MeshBasicMaterial({
       map: this.causticTexture,
       transparent: true,
-      opacity: 0.32,
+      opacity: 0.3,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
 
     this.causticPlane = new THREE.Mesh(causticGeom, causticMat);
-    this.causticPlane.position.y = this.tankBounds.minY + 0.14;
+    this.causticPlane.position.set(6.5, this.tankBounds.minY + 0.14, 0);
     this.scene.add(this.causticPlane);
   }
 
@@ -322,7 +361,7 @@ export class AquariumScene {
       this.sandTexture.colorSpace = THREE.SRGBColorSpace;
       this.sandTexture.wrapS = THREE.RepeatWrapping;
       this.sandTexture.wrapT = THREE.RepeatWrapping;
-      this.sandTexture.repeat.set(6, 5);
+      this.sandTexture.repeat.set(13, 5);
     } else {
       this.sandTexture.needsUpdate = true;
     }
@@ -333,20 +372,21 @@ export class AquariumScene {
 
     this.paintSandTexture(theme.sandColor);
 
-    // Wide panoramic terraced seabed so no empty void is visible on wide desktops
-    const sandGeom = new THREE.PlaneGeometry(16, 12, 48, 40);
+    // Wide panoramic terraced seabed spanning both Aquarium (x=0) and PvP Fighter Arena (x=12)
+    const sandGeom = new THREE.PlaneGeometry(36, 14, 72, 40);
     sandGeom.rotateX(-Math.PI / 2);
     const pos = sandGeom.attributes.position;
     for (let i = 0; i < pos.count; i++) {
-      const px = pos.getX(i);
+      const px = pos.getX(i) + 6.5; // world X
       const pz = pos.getZ(i);
-      // Gentle dunes + raised back Aquascape terrace behind z < -1.0 + rocky outer flanks
-      const backSlope = Math.max(0, -pz - 0.8) * 0.24;
-      const sideFlanks = Math.max(0, Math.abs(px) - 2.6) * 0.16;
+      const backSlope = Math.max(0, -pz - 0.9) * 0.22;
       const wave =
-        Math.sin(px * 1.5 + 0.4) * Math.cos(pz * 1.3) * 0.11 +
-        Math.sin(px * 3.2 - pz * 2.1) * 0.035;
-      pos.setY(i, wave + backSlope + sideFlanks);
+        Math.sin(px * 1.5 + 0.4) * Math.cos(pz * 1.3) * 0.09 +
+        Math.sin(px * 3.2 - pz * 2.1) * 0.03;
+      // Flatten seabed gently right under the Arena octagon (around X=12)
+      const distArena = Math.hypot(px - this.arenaCenterX, pz);
+      const arenaFlat = THREE.MathUtils.clamp((distArena - 2.6) / 1.4, 0, 1);
+      pos.setY(i, (wave + backSlope) * arenaFlat);
     }
     sandGeom.computeVertexNormals();
 
@@ -356,7 +396,7 @@ export class AquariumScene {
       metalness: 0.05,
     });
     this.sandMesh = new THREE.Mesh(sandGeom, this.sandMaterial);
-    this.sandMesh.position.y = this.tankBounds.minY;
+    this.sandMesh.position.set(6.5, this.tankBounds.minY, 0);
     this.sandMesh.receiveShadow = true;
     this.scene.add(this.sandMesh);
 
@@ -367,8 +407,8 @@ export class AquariumScene {
     this.buildSunkenCartridge();
     this.buildAquaticFlora();
 
-    // Expansive Shimmering Water Surface + Subtle Floating Lily Leaves
-    const surfGeom = new THREE.PlaneGeometry(16, 12, 24, 24);
+    // Expansive Shimmering Water Surface across both Aquarium & Arena
+    const surfGeom = new THREE.PlaneGeometry(36, 14, 36, 20);
     surfGeom.rotateX(Math.PI / 2);
     const surfMat = new THREE.MeshPhysicalMaterial({
       color: 0x38bdf8,
@@ -381,7 +421,7 @@ export class AquariumScene {
       depthWrite: false,
     });
     this.waterSurfaceMesh = new THREE.Mesh(surfGeom, surfMat);
-    this.waterSurfaceMesh.position.y = this.tankBounds.maxY;
+    this.waterSurfaceMesh.position.set(6.5, this.tankBounds.maxY, 0);
     this.scene.add(this.waterSurfaceMesh);
 
     // Floating surface lily pads at top flanks for natural depth
@@ -711,7 +751,7 @@ export class AquariumScene {
     rayGeom.translate(0, -2.2, 0);
 
     this.godRayMaterial = new THREE.MeshBasicMaterial({
-      color: 0x93c5fd,
+      color: this.themeTopColor,
       transparent: true,
       opacity: 0.065,
       blending: THREE.AdditiveBlending,
@@ -732,6 +772,206 @@ export class AquariumScene {
     });
   }
 
+  private initFighterArena() {
+    this.arenaGroup.position.set(this.arenaCenterX, 0, 0);
+    this.scene.add(this.arenaGroup);
+    const baseY = this.tankBounds.minY;
+    const tankH = 4.1;
+    const halfW = 3.35;
+    const halfD = 1.85;
+
+    const basaltMat = new THREE.MeshStandardMaterial({ color: 0x16090e, roughness: 0.65, metalness: 0.35 });
+    const slateMat = new THREE.MeshStandardMaterial({ color: 0x291119, roughness: 0.48, metalness: 0.42 });
+    const tankFrameMat = new THREE.MeshStandardMaterial({ color: 0x13070b, roughness: 0.32, metalness: 0.82 });
+    const goldTrimMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0x92400e, emissiveIntensity: 0.35, roughness: 0.25, metalness: 0.85 });
+    const scarletNeonMat = new THREE.MeshStandardMaterial({ color: 0xfb7185, emissive: 0xe11d48, emissiveIntensity: 1.55, roughness: 0.2 });
+    const deepCrimsonGlowMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 1.4, roughness: 0.22 });
+    const cyanGlowMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x0891b2, emissiveIntensity: 1.2, roughness: 0.2 });
+
+    // Transition Seafloor Passageway Stones (between Aquarium X=4.5 and Battle Tank X=8.2)
+    const archX = -5.4;
+    const archMat = new THREE.MeshStandardMaterial({ color: 0x261218, roughness: 0.85 });
+    [-1.2, 1.2].forEach((az) => {
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.36, 3.2, 8), archMat);
+      col.position.set(archX, baseY + 1.5, az);
+      this.arenaGroup.add(col);
+    });
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.34, 3.0), archMat);
+    lintel.position.set(archX, baseY + 3.05, 0);
+    this.arenaGroup.add(lintel);
+
+    // === ENCLOSED BATTLE ARENA AQUARIUM STRUCTURE ===
+    // 4 Corner Steel & Crimson LED Tank Columns
+    const cornerCoords = [
+      { x: -halfW, z: -halfD },
+      { x: halfW, z: -halfD },
+      { x: -halfW, z: halfD },
+      { x: halfW, z: halfD },
+    ];
+    cornerCoords.forEach((cc) => {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(0.2, tankH, 0.2), tankFrameMat);
+      col.position.set(cc.x, baseY + tankH * 0.5, cc.z);
+      this.arenaGroup.add(col);
+
+      const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(0.06, tankH - 0.16, 0.06), scarletNeonMat);
+      ledStrip.position.set(
+        cc.x + (cc.x < 0 ? 0.09 : -0.09),
+        baseY + tankH * 0.5,
+        cc.z + (cc.z < 0 ? 0.09 : -0.09)
+      );
+      this.arenaGroup.add(ledStrip);
+    });
+
+    // Bottom Tank Plinth Frame & Glowing Crimson Perimeter Rails
+    const fbBeamGeom = new THREE.BoxGeometry(halfW * 2 + 0.24, 0.22, 0.22);
+    const lrBeamGeom = new THREE.BoxGeometry(0.22, 0.22, halfD * 2 + 0.24);
+    [-halfD, halfD].forEach((z) => {
+      const bBeam = new THREE.Mesh(fbBeamGeom, tankFrameMat);
+      bBeam.position.set(0, baseY + 0.11, z);
+      const tBeam = new THREE.Mesh(fbBeamGeom, tankFrameMat);
+      tBeam.position.set(0, baseY + tankH - 0.09, z);
+      const bGlow = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2 - 0.12, 0.05, 0.05), scarletNeonMat);
+      bGlow.position.set(0, baseY + 0.23, z + (z > 0 ? -0.08 : 0.08));
+      const tGlow = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2 - 0.12, 0.05, 0.05), scarletNeonMat);
+      tGlow.position.set(0, baseY + tankH - 0.21, z + (z > 0 ? -0.08 : 0.08));
+      this.arenaGroup.add(bBeam, tBeam, bGlow, tGlow);
+    });
+    [-halfW, halfW].forEach((x) => {
+      const bBeam = new THREE.Mesh(lrBeamGeom, tankFrameMat);
+      bBeam.position.set(x, baseY + 0.11, 0);
+      const tBeam = new THREE.Mesh(lrBeamGeom, tankFrameMat);
+      tBeam.position.set(x, baseY + tankH - 0.09, 0);
+      const bGlow = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, halfD * 2 - 0.12), scarletNeonMat);
+      bGlow.position.set(x + (x > 0 ? -0.08 : 0.08), baseY + 0.23, 0);
+      const tGlow = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, halfD * 2 - 0.12), scarletNeonMat);
+      tGlow.position.set(x + (x > 0 ? -0.08 : 0.08), baseY + tankH - 0.21, 0);
+      this.arenaGroup.add(bBeam, tBeam, bGlow, tGlow);
+    });
+
+    // Translucent Tinted Aquarium Glass Walls (Left, Right & Back)
+    const sideGlassMat = new THREE.MeshStandardMaterial({
+      color: 0xf43f5e,
+      emissive: 0x4c0519,
+      emissiveIntensity: 0.35,
+      transparent: true,
+      opacity: 0.11,
+      roughness: 0.08,
+      metalness: 0.25,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const sideWallGeom = new THREE.PlaneGeometry(halfD * 2 - 0.12, tankH - 0.28);
+    [-halfW + 0.04, halfW - 0.04].forEach((x) => {
+      const wall = new THREE.Mesh(sideWallGeom, sideGlassMat);
+      wall.rotation.y = Math.PI / 2;
+      wall.position.set(x, baseY + tankH * 0.5, 0);
+      this.arenaGroup.add(wall);
+    });
+
+    const backGlassMat = new THREE.MeshStandardMaterial({
+      color: 0x3b0714,
+      emissive: 0x26040d,
+      emissiveIntensity: 0.65,
+      transparent: true,
+      opacity: 0.72,
+      roughness: 0.2,
+      metalness: 0.2,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(halfW * 2 - 0.16, tankH - 0.28), backGlassMat);
+    backWall.position.set(0, baseY + tankH * 0.5, -halfD + 0.06);
+    this.arenaGroup.add(backWall);
+
+    // Subtle Arena Back Wall Emblem Rings & Illuminated "FIGHTER ARENA" Signboard
+    const backEmblemOuter = new THREE.Mesh(new THREE.TorusGeometry(1.38, 0.032, 10, 48), deepCrimsonGlowMat);
+    backEmblemOuter.position.set(0, baseY + 1.95, -halfD + 0.14);
+    const backEmblemInner = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.024, 10, 6), goldTrimMat);
+    backEmblemInner.position.set(0, baseY + 1.95, -halfD + 0.15);
+    this.arenaGroup.add(backEmblemOuter, backEmblemInner);
+    this.arenaAnimatedNodes.push({ obj: backEmblemInner, baseY: baseY + 1.95, phase: 0.4 });
+
+    const arenaSignTex = this.makeRetroSignTexture('FIGHTER ARENA', 'PVP BATTLE TANK', '#fb7185', '#1d050c');
+    const arenaSignMat = new THREE.MeshBasicMaterial({ map: arenaSignTex });
+    const arenaSignBoard = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.68, 0.1), [
+      tankFrameMat, tankFrameMat, tankFrameMat, tankFrameMat, arenaSignMat, tankFrameMat,
+    ]);
+    arenaSignBoard.position.set(0, baseY + tankH - 0.62, -halfD + 0.22);
+    const arenaSignGlowFrame = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.76, 0.06), scarletNeonMat);
+    arenaSignGlowFrame.position.set(0, baseY + tankH - 0.62, -halfD + 0.17);
+    this.arenaGroup.add(arenaSignBoard, arenaSignGlowFrame);
+
+    // Stepped Octagonal Battle Arena Floor Stage inside the Tank
+    const outerRing = new THREE.Mesh(new THREE.CylinderGeometry(2.95, 3.2, 0.22, 8), basaltMat);
+    outerRing.position.set(0, baseY + 0.12, 0);
+    outerRing.receiveShadow = true;
+    this.arenaGroup.add(outerRing);
+
+    const innerStage = new THREE.Mesh(new THREE.CylinderGeometry(2.45, 2.65, 0.16, 8), slateMat);
+    innerStage.position.set(0, baseY + 0.26, 0);
+    innerStage.receiveShadow = true;
+    this.arenaGroup.add(innerStage);
+
+    // Glowing Battle Zone Floor Rings (Crimson Arena Ring + Corner Accents + Gold Center Crest)
+    const arenaPerimeterRing = new THREE.Mesh(new THREE.TorusGeometry(2.38, 0.04, 10, 48), deepCrimsonGlowMat);
+    arenaPerimeterRing.rotation.x = Math.PI / 2;
+    arenaPerimeterRing.position.set(0, baseY + 0.35, 0);
+    this.arenaGroup.add(arenaPerimeterRing);
+
+    const leftArc = new THREE.Mesh(new THREE.TorusGeometry(1.85, 0.036, 10, 28, Math.PI), cyanGlowMat);
+    leftArc.rotation.x = Math.PI / 2;
+    leftArc.rotation.z = Math.PI / 2;
+    leftArc.position.set(0, baseY + 0.355, 0);
+    this.arenaGroup.add(leftArc);
+
+    const rightArc = new THREE.Mesh(new THREE.TorusGeometry(1.85, 0.036, 10, 28, Math.PI), scarletNeonMat);
+    rightArc.rotation.x = Math.PI / 2;
+    rightArc.rotation.z = -Math.PI / 2;
+    rightArc.position.set(0, baseY + 0.355, 0);
+    this.arenaGroup.add(rightArc);
+
+    const centerRing = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.032, 10, 32), goldTrimMat);
+    centerRing.rotation.x = Math.PI / 2;
+    centerRing.position.set(0, baseY + 0.36, 0);
+    this.arenaGroup.add(centerRing);
+
+    // 4 Inner Colosseum Corner Pylons with Floating Energy Crystals
+    const pillarCoords = [
+      { x: -2.2, z: -1.15, isPlayer: true },
+      { x: -2.2, z: 1.15, isPlayer: true },
+      { x: 2.2, z: -1.15, isPlayer: false },
+      { x: 2.2, z: 1.15, isPlayer: false },
+    ];
+    pillarCoords.forEach((pc, idx) => {
+      const pGroup = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.26, 8), basaltMat);
+      base.position.y = 0.13;
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 1.55, 8), slateMat);
+      shaft.position.y = 0.96;
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.15, 0.18, 8), goldTrimMat);
+      cap.position.y = 1.8;
+
+      const orb = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.14, 0),
+        pc.isPlayer ? cyanGlowMat : scarletNeonMat
+      );
+      orb.position.y = 2.15;
+      pGroup.add(base, shaft, cap, orb);
+      pGroup.position.set(pc.x, baseY + 0.12, pc.z);
+      this.arenaGroup.add(pGroup);
+      this.arenaAnimatedNodes.push({ obj: orb, baseY: 2.15, phase: idx * 1.4 });
+    });
+
+    // Dedicated Battle Tank Lights (Crimson Core + Rival/Player Side Accents)
+    this.arenaCyanLight = new THREE.PointLight(0xfb7185, 1.8, 8);
+    this.arenaCyanLight.position.set(-2.1, 1.35, 1.0);
+    this.arenaCrimsonLight = new THREE.PointLight(0xef4444, 2.8, 9.5);
+    this.arenaCrimsonLight.position.set(2.1, 1.35, 1.0);
+    this.arenaBackRedLight = new THREE.PointLight(0xe11d48, 3.2, 10);
+    this.arenaBackRedLight.position.set(0, 0.9, -1.25);
+    this.arenaGroup.add(this.arenaCyanLight, this.arenaCrimsonLight, this.arenaBackRedLight);
+  }
+
   private initPlankton() {
     const pGeom = new THREE.SphereGeometry(0.015, 6, 6);
     const pMat = new THREE.MeshBasicMaterial({
@@ -746,7 +986,7 @@ export class AquariumScene {
 
     for (let i = 0; i < this.planktonCount; i++) {
       const p = {
-        x: THREE.MathUtils.randFloat(this.tankBounds.minX, this.tankBounds.maxX),
+        x: THREE.MathUtils.randFloat(-4.5, this.arenaCenterX + 4.5),
         y: THREE.MathUtils.randFloat(this.tankBounds.minY, this.tankBounds.maxY),
         z: THREE.MathUtils.randFloat(this.tankBounds.minZ, this.tankBounds.maxZ),
         vx: THREE.MathUtils.randFloat(-0.04, 0.04),
@@ -765,14 +1005,16 @@ export class AquariumScene {
   }
 
   private updatePlankton(delta: number) {
+    const minWorldX = -4.5;
+    const maxWorldX = this.arenaCenterX + 4.5;
     for (let i = 0; i < this.planktonCount; i++) {
       const p = this.planktonData[i];
       p.x += p.vx * delta;
       p.y += p.vy * delta;
       p.z += p.vz * delta;
 
-      if (p.x < this.tankBounds.minX) p.x = this.tankBounds.maxX;
-      if (p.x > this.tankBounds.maxX) p.x = this.tankBounds.minX;
+      if (p.x < minWorldX) p.x = maxWorldX;
+      if (p.x > maxWorldX) p.x = minWorldX;
       if (p.y < this.tankBounds.minY) p.y = this.tankBounds.maxY;
       if (p.y > this.tankBounds.maxY) p.y = this.tankBounds.minY;
 
@@ -1300,22 +1542,17 @@ export class AquariumScene {
 
   private applyAtmosphere() {
     const theme = AQUARIUM_THEMES[this.currentThemeId] || AQUARIUM_THEMES.tokyo_neon_96;
-    const baseWater = new THREE.Color(theme.waterColor);
-    const baseFog = new THREE.Color(theme.fogColor);
+    this.themeWaterColor.set(theme.waterColor);
+    this.themeFogColor.set(theme.fogColor);
 
     // Subtle algae murkiness if cleanliness drops below 60%
     const murk = Math.max(0, (60 - this.cleanlinessLevel) / 60) * 0.45;
     if (murk > 0) {
-      const algaeTint = new THREE.Color('#2d4a22');
-      baseWater.lerp(algaeTint, murk);
-      baseFog.lerp(algaeTint, murk);
+      this._blendColor.set('#2d4a22');
+      this.themeWaterColor.lerp(this._blendColor, murk);
+      this.themeFogColor.lerp(this._blendColor, murk);
     }
-
-    this.scene.background = baseWater;
-    if (this.scene.fog instanceof THREE.FogExp2) {
-      this.scene.fog.color.copy(baseFog);
-      this.scene.fog.density = 0.08 + murk * 0.14;
-    }
+    this.themeFogDensity = 0.08 + murk * 0.14;
 
     // Theme-reactive lighting mood so each theme transforms the whole tank!
     const topColors: Record<AquariumThemeId, number> = {
@@ -1333,15 +1570,58 @@ export class AquariumScene {
       golden_palace: 0xf59e0b,
     };
 
+    this.themeTopColor.setHex(topColors[this.currentThemeId] || 0x7dd3fc);
+    this.themeRimColor.setHex(rimColors[this.currentThemeId] || 0xa5f3fc);
+    this.themeTopIntensity = 2.2 * (theme.ambientIntensity || 1.0);
+
+    this.updateAtmosphereBlend();
+  }
+
+  private updateAtmosphereBlend() {
+    const t = this.fighterBlend;
+
+    if (this.scene.background instanceof THREE.Color) {
+      this.scene.background.copy(this.themeWaterColor).lerp(this.arenaWaterColor, t);
+    } else {
+      this.scene.background = this.themeWaterColor.clone().lerp(this.arenaWaterColor, t);
+    }
+
+    if (this.scene.fog instanceof THREE.FogExp2) {
+      this.scene.fog.color.copy(this.themeFogColor).lerp(this.arenaFogColor, t);
+      this.scene.fog.density = THREE.MathUtils.lerp(this.themeFogDensity, 0.095, t);
+    }
+
     if (this.waterTopLight) {
-      this.waterTopLight.color.setHex(topColors[this.currentThemeId] || 0x7dd3fc);
-      this.waterTopLight.intensity = 2.2 * (theme.ambientIntensity || 1.0);
+      this.waterTopLight.color.copy(this.themeTopColor).lerp(this.arenaTopColor, t);
+      this.waterTopLight.intensity = THREE.MathUtils.lerp(this.themeTopIntensity, 2.85, t);
+      const lx = THREE.MathUtils.lerp(0, this.arenaCenterX, t);
+      this.waterTopLight.position.x = lx;
+      this.waterTopLight.target.position.x = lx;
+      this.waterTopLight.target.updateMatrixWorld();
     }
+
     if (this.rimLight) {
-      this.rimLight.color.setHex(rimColors[this.currentThemeId] || 0xa5f3fc);
+      this.rimLight.color.copy(this.themeRimColor).lerp(this.arenaRimColor, t);
+      this.rimLight.intensity = THREE.MathUtils.lerp(1.8, 2.6, t);
+      this.rimLight.position.x = THREE.MathUtils.lerp(-1.5, this.arenaCenterX - 1.5, t);
     }
+
+    if (this.keyLight) {
+      this.keyLight.position.x = THREE.MathUtils.lerp(2.4, this.arenaCenterX + 2.4, t);
+    }
+
+    if (this.hemiLight) {
+      this.hemiLight.color.copy(this.themeHemiSkyColor).lerp(this.arenaHemiSkyColor, t);
+    }
+
     if (this.godRayMaterial) {
-      this.godRayMaterial.color.setHex(topColors[this.currentThemeId] || 0x93c5fd);
+      this.godRayMaterial.color.copy(this.themeTopColor).lerp(this.arenaTopColor, t);
+      this.godRaysGroup.position.x = THREE.MathUtils.lerp(0, this.arenaCenterX, t);
+    }
+
+    if (this.waterSurfaceMesh) {
+      const surfMat = this.waterSurfaceMesh.material as THREE.MeshPhysicalMaterial;
+      surfMat.color.copy(this.themeWaterSurfColor).lerp(this.arenaWaterSurfColor, t);
     }
   }
 
@@ -1495,6 +1775,7 @@ export class AquariumScene {
 
   private setupEvents() {
     this.onPointerDownBound = (e: PointerEvent) => {
+      if (this.fighterMode) return;
       const rect = this.container.getBoundingClientRect();
       this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -1544,6 +1825,60 @@ export class AquariumScene {
     this.buildThemeDecorations(themeId);
   }
 
+  public enterFighterMode(opponentSkin: FishColorPalette, opponentVip = false) {
+    this.fighterMode = true;
+    this.opponentFish.updateSkin(opponentSkin);
+    this.opponentFish.setVip(opponentVip);
+    this.opponentFish.group.visible = true;
+
+    const playerStance = new THREE.Vector3(this.arenaCenterX - 1.35, 0.25, 0.18);
+    const rivalStance = new THREE.Vector3(this.arenaCenterX + 1.35, 0.25, 0.18);
+    this.opponentFish.currentPosition.copy(rivalStance);
+    this.opponentFish.group.position.copy(rivalStance);
+
+    this.fish.enterCombat(playerStance, 0);
+    this.opponentFish.enterCombat(rivalStance, Math.PI);
+    this.createTapRipple(new THREE.Vector3(this.arenaCenterX, 0.25, 0.2), 1.6);
+  }
+
+  public exitFighterMode() {
+    this.fighterMode = false;
+    this.opponentFish.group.visible = false;
+    this.fish.exitCombat(new THREE.Vector3(0, 0.18, 0.2));
+  }
+
+  public setOpponentSkin(opponentSkin: FishColorPalette, opponentVip = false) {
+    this.opponentFish.updateSkin(opponentSkin);
+    this.opponentFish.setVip(opponentVip);
+  }
+
+  public playFighterMove(
+    actor: 'player' | 'opponent',
+    kind: 'light' | 'heavy' | 'ultimate' | 'guard_on' | 'guard_off' | 'hit'
+  ) {
+    const fishObj = actor === 'player' ? this.fish : this.opponentFish;
+    const dirX = actor === 'player' ? 1 : -1;
+
+    if (kind === 'guard_on') {
+      fishObj.setCombatGuard(true);
+      this.createTapRipple(fishObj.currentPosition, 0.7);
+      return;
+    }
+    if (kind === 'guard_off') {
+      fishObj.setCombatGuard(false);
+      return;
+    }
+    if (kind === 'hit') {
+      fishObj.triggerCombatHit(-dirX);
+      this.createTapRipple(fishObj.currentPosition, 1.0);
+      return;
+    }
+
+    fishObj.triggerCombatStrike(dirX, kind);
+    const impactScale = kind === 'ultimate' ? 2.0 : kind === 'heavy' ? 1.35 : 0.85;
+    this.createTapRipple(new THREE.Vector3(this.arenaCenterX, 0.25, 0.25), impactScale);
+  }
+
   private startLoop() {
     const tick = () => {
       if (this.isDisposed) return;
@@ -1553,12 +1888,23 @@ export class AquariumScene {
       const time = this.clock.getElapsedTime();
 
       this.fish.update(delta, this.tankBounds);
+      if (this.fighterMode) {
+        this.opponentFish.update(delta, this.tankBounds);
+      }
+
       this.updateCaustics(time);
       this.updateBubbles(delta, time);
       this.updatePlankton(delta);
       this.updateFood(delta);
       this.updateRipples(delta);
       this.updateThemeProps(delta, time);
+
+      // Animate Arena corner energy crystals
+      for (let i = 0; i < this.arenaAnimatedNodes.length; i++) {
+        const node = this.arenaAnimatedNodes[i];
+        node.obj.rotation.y += delta * 1.4;
+        node.obj.position.y = node.baseY + Math.sin(time * 2.2 + node.phase) * 0.09;
+      }
 
       // Gentle aquatic flora sway
       for (let p = 0; p < this.plantMeshes.length; p++) {
@@ -1575,12 +1921,36 @@ export class AquariumScene {
         pos.needsUpdate = true;
       }
 
-      // Smooth camera damping (subtle floating focus on fish)
-      const targetCamX = THREE.MathUtils.clamp(this.fish.currentPosition.x * 0.16, -0.5, 0.5);
-      const targetCamY = THREE.MathUtils.clamp(0.24 + this.fish.currentPosition.y * 0.12, -0.2, 0.6);
-      this.camera.position.x = THREE.MathUtils.damp(this.camera.position.x, targetCamX, 1.8, delta);
-      this.camera.position.y = THREE.MathUtils.damp(this.camera.position.y, targetCamY, 1.8, delta);
-      this.camera.position.z = THREE.MathUtils.damp(this.camera.position.z, this.currentCameraPos.z, 2.5, delta);
+      // Smoothly transition crimson Fighter Arena atmosphere & camera slide
+      const targetBlend = this.fighterMode ? 1 : 0;
+      const nextBlend = THREE.MathUtils.damp(this.fighterBlend, targetBlend, 4.0, delta);
+      if (Math.abs(nextBlend - this.fighterBlend) > 0.0002) {
+        this.fighterBlend = Math.abs(nextBlend - targetBlend) < 0.001 ? targetBlend : nextBlend;
+        this.updateAtmosphereBlend();
+      }
+
+      if (this.arenaBackRedLight) {
+        this.arenaBackRedLight.intensity = 2.6 + Math.sin(time * 2.8) * 0.55;
+      }
+
+      // Smooth horizontal slide between Aquarium (X=0) and PvP Fighter Arena (X=12)
+      const targetCamX = this.fighterMode
+        ? this.arenaCenterX
+        : THREE.MathUtils.clamp(this.fish.currentPosition.x * 0.16, -0.5, 0.5);
+      const targetCamY = this.fighterMode
+        ? 0.42
+        : THREE.MathUtils.clamp(0.24 + this.fish.currentPosition.y * 0.12, -0.2, 0.6);
+      const targetCamZ = this.fighterMode ? this.arenaAspectZ : this.currentCameraPos.z;
+      const targetLookX = this.fighterMode ? this.arenaCenterX : 0;
+      const targetLookY = this.fighterMode ? 0.18 : 0.12;
+
+      const camLambda = this.fighterMode ? 4.4 : 3.4;
+      this.camera.position.x = THREE.MathUtils.damp(this.camera.position.x, targetCamX, camLambda, delta);
+      this.camera.position.y = THREE.MathUtils.damp(this.camera.position.y, targetCamY, camLambda, delta);
+      this.camera.position.z = THREE.MathUtils.damp(this.camera.position.z, targetCamZ, camLambda, delta);
+
+      this.cameraTarget.x = THREE.MathUtils.damp(this.cameraTarget.x, targetLookX, camLambda, delta);
+      this.cameraTarget.y = THREE.MathUtils.damp(this.cameraTarget.y, targetLookY, camLambda, delta);
       this.camera.lookAt(this.cameraTarget);
 
       this.renderer.render(this.scene, this.camera);
@@ -1651,7 +2021,9 @@ export class AquariumScene {
       this.resizeObserver = null;
     }
     this.disposeGroupResources(this.decorGroup);
+    this.disposeGroupResources(this.arenaGroup);
     this.fish.dispose();
+    this.opponentFish.dispose();
     this.causticTexture.dispose();
     this.sandTexture.dispose();
     this.renderer.dispose();

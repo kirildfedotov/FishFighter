@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Sparkles } from 'lucide-react';
+import { X, Eye } from 'lucide-react';
 import { retroAudio } from '../services/retroAudio';
 
 interface MirrorModalProps {
@@ -34,7 +34,6 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
     onTrainingCompleteRef.current = onTrainingComplete;
   }, [onTrainingComplete]);
 
-  // Trigger flare animation while holding mirror
   useEffect(() => {
     let interval: number | undefined;
 
@@ -54,14 +53,12 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
     };
   }, [isHoldingMirror, isCompleted]);
 
-  // Ensure flare is released when modal unmounts
   useEffect(() => {
     return () => {
       onFlareToggleRef.current(false);
     };
   }, []);
 
-  // Handle training completion outside setState updater
   useEffect(() => {
     if (flareProgress >= 100 && !completedFiredRef.current) {
       completedFiredRef.current = true;
@@ -75,9 +72,7 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
 
   return (
     <div className="fixed inset-x-0 bottom-3 sm:bottom-5 z-50 flex justify-center px-3 pointer-events-none select-none">
-      <div className="pointer-events-auto arcade-panel border-4 border-[#d946ef] w-full max-w-md p-3.5 sm:p-4 shadow-[0_0_35px_rgba(217,70,239,0.45)] text-center relative overflow-hidden">
-        
-        {/* Close Button */}
+      <div className="pointer-events-auto glass-panel border-violet-400/35 w-full max-w-md p-4 sm:p-5 text-center relative overflow-hidden">
         <button
           type="button"
           onClick={() => {
@@ -85,48 +80,40 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
             retroAudio.playBlip(400, 0.04);
           }}
           aria-label="Закрыть тренировку"
-          className="arcade-btn absolute top-2.5 right-2.5 bg-[#272744] hover:bg-[#383862] border-[#6366f1] text-white p-1"
+          className="ui-btn absolute top-3 right-3 bg-slate-800/80 hover:bg-slate-700 border-white/15 text-slate-200 p-1.5 rounded-xl"
         >
           <X className="w-4 h-4" />
         </button>
 
-        {/* Title */}
         <div className="flex justify-center items-center gap-2 mb-1 pr-8">
-          <span className="text-lg">🪞</span>
-          <h2 className="font-['Press_Start_2P'] text-[11px] sm:text-xs text-[#f5d0fe] tracking-wider">
-            ЗЕРКАЛЬНЫЙ КУРАЖ &apos;96
+          <Eye className="w-4 h-4 text-violet-300" />
+          <h2 className="font-display font-bold text-base text-white">
+            Тренировка с зеркалом
           </h2>
         </div>
-        <div className="font-['DotGothic16'] text-[11px] text-purple-300 mb-2">
-          ベタのフレアリング訓練 — смотрите на рыбку в аквариуме!
-        </div>
+        <p className="text-xs text-slate-400 mb-3">
+          Удерживайте кнопку, чтобы рыбка раскрыла плавники и жабры
+        </p>
 
-        {/* Compact Mirror Strip + Progress */}
-        <div className="rounded-md border-2 border-[#e879f9] bg-gradient-to-r from-[#3b0764] via-[#701a75] to-[#2e1065] p-2.5 mb-3 flex items-center gap-3 relative overflow-hidden">
-          <div className="w-11 h-11 shrink-0 rounded-md border-2 border-white/30 bg-gradient-to-tr from-[#4c1d95] via-[#a21caf]/40 to-white/25 flex items-center justify-center text-2xl shadow-inner">
-            {isHoldingMirror ? '🔥' : '🪞'}
+        <div className="rounded-xl border border-white/10 bg-slate-900/80 p-3 mb-3.5">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-200 mb-2">
+            <span className="truncate">
+              {isCompleted
+                ? 'Плавники полностью раскрыты!'
+                : isHoldingMirror
+                ? 'Петушок в боевой стойке'
+                : 'Готов к тренировке'}
+            </span>
+            <span className="font-mono text-violet-300 ml-2 tabular-nums">{flareProgress}%</span>
           </div>
-          <div className="flex-1 text-left min-w-0">
-            <div className="flex items-center justify-between text-[11px] font-mono font-bold text-white mb-1">
-              <span className="truncate">
-                {isCompleted
-                  ? 'ЖАБРЫ И ПЛАВНИКИ РАСКРЫТЫ!'
-                  : isHoldingMirror
-                  ? 'ПЕТУШОК В ЯРОСТИ! 180° ХВОСТ'
-                  : 'Зажмите кнопку, чтобы показать зеркало'}
-              </span>
-              <span className="text-[#f5d0fe] ml-2 tabular-nums shrink-0">{flareProgress}%</span>
-            </div>
-            <div className="w-full h-2.5 bg-black/60 rounded-sm border border-[#f0abfc] overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#d946ef] to-[#facc15] transition-all duration-100"
-                style={{ width: `${flareProgress}%` }}
-              />
-            </div>
+          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-400 transition-all duration-100 rounded-full"
+              style={{ width: `${flareProgress}%` }}
+            />
           </div>
         </div>
 
-        {/* Action Button */}
         {!isCompleted ? (
           <button
             type="button"
@@ -134,25 +121,24 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
             onPointerUp={() => setIsHoldingMirror(false)}
             onPointerLeave={() => setIsHoldingMirror(false)}
             onPointerCancel={() => setIsHoldingMirror(false)}
-            className="arcade-btn w-full py-2.5 px-5 bg-[#d946ef] hover:bg-[#e879f9] border-[#f5d0fe] text-black text-xs tracking-wide touch-none"
+            className="ui-btn w-full py-3 px-5 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-400 hover:to-fuchsia-400 border-violet-300/40 text-white font-bold text-xs sm:text-sm touch-none"
           >
-            {isHoldingMirror ? 'ДЕРЖИМ ЗЕРКАЛО...' : 'ЗАЖАТЬ ЗЕРКАЛО'}
+            {isHoldingMirror ? 'Держим зеркало...' : 'Зажать зеркало'}
           </button>
         ) : (
-          <div className="space-y-2">
-            <div className="text-xs font-bold text-[#facc15] flex items-center justify-center gap-1">
-              <Sparkles className="w-4 h-4 shrink-0" /> +35 ОПЫТА +25 🪙 +СЧАСТЬЕ
+          <div className="space-y-2.5">
+            <div className="text-xs font-mono font-bold text-amber-300">
+              +35 EXP · +25 🪙 · +Радость
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="arcade-btn w-full py-2 px-4 bg-[#22c55e] hover:bg-[#4ade80] border-[#86efac] text-black text-xs"
+              className="ui-btn w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 border-emerald-300/40 text-slate-950 font-bold text-xs"
             >
-              ОТЛИЧНО!
+              Готово
             </button>
           </div>
         )}
-
       </div>
     </div>
   );

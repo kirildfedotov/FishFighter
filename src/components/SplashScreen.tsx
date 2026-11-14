@@ -268,7 +268,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ stats, onStart }) =>
         </div>
 
         <p className="text-xs sm:text-sm text-[#cbd5e1] max-w-md mb-5 sm:mb-7 leading-relaxed font-mono">
-          Вырастите легендарного бойцового петушка: кормите, тренируйте у зеркала, открывайте редкие окрасы и играйте в 8-бит аркаду.
+          Вырастите легендарного бойцового петушка: кормите, тренируйте у зеркала, открывайте редкие окрасы и сражайтесь на PvP-арене.
         </p>
 
         {/* Primary Arcade CTA Button */}
