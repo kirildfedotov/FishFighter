@@ -27,6 +27,16 @@ interface ActiveRipple {
   maxScale: number;
 }
 
+interface CombatVfxItem {
+  mesh: THREE.Mesh;
+  material: THREE.MeshBasicMaterial;
+  vel: THREE.Vector3;
+  life: number;
+  maxLife: number;
+  scaleSpeed: number;
+  kind: 'slash' | 'ring' | 'spark';
+}
+
 // Pre-allocated scratch helpers (zero GC in 60fps loop)
 const _dummy = new THREE.Object3D();
 const _mouthPos = new THREE.Vector3();
@@ -63,6 +73,7 @@ export class AquariumScene {
   private causticCtx!: CanvasRenderingContext2D;
   private causticTexture!: THREE.CanvasTexture;
   private waterSurfaceMesh!: THREE.Mesh;
+  private waterSurfaceOrigY!: Float32Array;
 
   private plantMeshes: THREE.Mesh[] = [];
   private plantOriginalVertices: Float32Array[] = [];
@@ -116,6 +127,11 @@ export class AquariumScene {
   private arenaCrimsonLight!: THREE.PointLight;
   private arenaBackRedLight!: THREE.PointLight;
   private arenaAspectZ: number = 5.5;
+  private combatVfxGroup: THREE.Group = new THREE.Group();
+  private activeCombatVfx: CombatVfxItem[] = [];
+  private arenaShakeIntensity = 0;
+  private arenaImpactZoom = 0;
+  private arenaFlashIntensity = 0;
 
   // Pre-allocated Atmosphere Colors (zero GC in 60fps loop)
   private themeWaterColor = new THREE.Color('#092747');
@@ -246,12 +262,18 @@ export class AquariumScene {
     this.scene.add(this.waterTopLight.target);
 
     // Backlight to illuminate translucent silk Betta fins from behind!
-    this.rimLight = new THREE.PointLight(0xa5f3fc, 1.8, 10);
+    this.rimLight = new THREE.PointLight(0xa5f3fc, 1.85, 10);
     this.rimLight.position.set(-1.5, 0.8, -2.0);
     this.scene.add(this.rimLight);
 
+    // Soft warm seabed bounce fill light for sculptural depth under driftwood and fish belly
+    const sandBounceLight = new THREE.PointLight(0xfde68a, 0.65, 8);
+    sandBounceLight.position.set(0.3, -1.25, 1.6);
+    this.scene.add(sandBounceLight);
+
     this.scene.add(this.decorGroup);
     this.scene.add(this.tapRipplesGroup);
+    this.scene.add(this.combatVfxGroup);
     this.scene.add(this.godRaysGroup);
   }
 
@@ -405,20 +427,28 @@ export class AquariumScene {
     this.buildBackCliffSilhouettes();
     this.buildAquaticDriftwood();
     this.buildRiverStones();
+    this.buildAquascapeDetails();
     this.buildAirstoneDiffuser();
     this.buildSunkenCartridge();
     this.buildAquaticFlora();
+    this.buildMainTankFrame();
 
     // Expansive Shimmering Water Surface across both Aquarium & Arena
-    const surfGeom = new THREE.PlaneGeometry(36, 14, 36, 20);
+    const surfGeom = new THREE.PlaneGeometry(36, 14, 48, 22);
     surfGeom.rotateX(Math.PI / 2);
+    this.waterSurfaceOrigY = new Float32Array(surfGeom.attributes.position.count);
+    const surfPos = surfGeom.attributes.position;
+    for (let i = 0; i < surfPos.count; i++) {
+      this.waterSurfaceOrigY[i] = surfPos.getY(i);
+    }
+
     const surfMat = new THREE.MeshPhysicalMaterial({
       color: 0x38bdf8,
       transmission: this.isSoftwareGl ? 0 : 0.85,
-      roughness: 0.09,
-      metalness: 0.1,
+      roughness: 0.08,
+      metalness: 0.12,
       transparent: true,
-      opacity: this.isSoftwareGl ? 0.35 : 0.46,
+      opacity: this.isSoftwareGl ? 0.35 : 0.48,
       ior: 1.33,
       depthWrite: false,
     });
@@ -426,25 +456,59 @@ export class AquariumScene {
     this.waterSurfaceMesh.position.set(6.5, this.tankBounds.maxY, 0);
     this.scene.add(this.waterSurfaceMesh);
 
-    // Floating surface lily pads at top flanks for natural depth
+    // Floating surface lily pads & blooming lotus flowers for natural depth
     const padMat = new THREE.MeshStandardMaterial({
       color: 0x15803d,
-      roughness: 0.4,
+      roughness: 0.38,
       side: THREE.DoubleSide,
     });
+    const lotusPetalMat = new THREE.MeshStandardMaterial({
+      color: 0xfbcfe8,
+      emissive: 0xf472b6,
+      emissiveIntensity: 0.18,
+      roughness: 0.32,
+      side: THREE.DoubleSide,
+    });
+    const lotusCenterMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      emissive: 0xeab308,
+      emissiveIntensity: 0.35,
+      roughness: 0.3,
+    });
+
     const lilySpots = [
-      { x: -2.4, z: -0.6, r: 0.24 },
-      { x: -2.05, z: -0.35, r: 0.16 },
-      { x: 2.35, z: -0.75, r: 0.26 },
-      { x: 1.95, z: -0.95, r: 0.18 },
+      { x: -2.4, z: -0.6, r: 0.25, hasFlower: true },
+      { x: -2.02, z: -0.35, r: 0.17, hasFlower: false },
+      { x: 2.35, z: -0.75, r: 0.27, hasFlower: true },
+      { x: 1.92, z: -0.95, r: 0.18, hasFlower: false },
+      { x: -1.42, z: -0.92, r: 0.15, hasFlower: false },
     ];
     lilySpots.forEach((p, idx) => {
-      const padGeom = new THREE.CircleGeometry(p.r, 14, 0.25, Math.PI * 1.85);
+      const padGeom = new THREE.CircleGeometry(p.r, 16, 0.25, Math.PI * 1.85);
       padGeom.rotateX(-Math.PI / 2);
       const pad = new THREE.Mesh(padGeom, padMat);
       pad.position.set(p.x, this.tankBounds.maxY - 0.04, p.z);
       pad.rotation.y = idx * 1.3;
       this.scene.add(pad);
+
+      if (p.hasFlower) {
+        const lotus = new THREE.Group();
+        for (let pet = 0; pet < 8; pet++) {
+          const ang = (pet / 8) * Math.PI * 2;
+          const petalGeom = new THREE.ConeGeometry(0.038, 0.11, 5);
+          petalGeom.scale(1, 1, 0.45);
+          const petal = new THREE.Mesh(petalGeom, lotusPetalMat);
+          petal.position.set(Math.cos(ang) * 0.045, 0.035, Math.sin(ang) * 0.045);
+          petal.rotation.y = -ang + Math.PI / 2;
+          petal.rotation.x = 0.65;
+          lotus.add(petal);
+        }
+        const core = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), lotusCenterMat);
+        core.position.y = 0.038;
+        lotus.add(core);
+        lotus.position.set(p.x, this.tankBounds.maxY - 0.03, p.z);
+        this.scene.add(lotus);
+      }
     });
 
     this.buildThemeDecorations(themeId);
@@ -583,6 +647,178 @@ export class AquariumScene {
     });
   }
 
+  private buildAquascapeDetails() {
+    const baseY = this.tankBounds.minY;
+
+    // 1. Open Mother-of-Pearl Clamshell resting on foreground right sand terrace
+    const shellMat = new THREE.MeshStandardMaterial({
+      color: 0xf1f5f9,
+      roughness: 0.34,
+      metalness: 0.18,
+    });
+    const shellInnerMat = new THREE.MeshPhysicalMaterial({
+      color: 0xfce7f3,
+      roughness: 0.16,
+      metalness: 0.15,
+      iridescence: 0.9,
+    });
+    const pearlMat = new THREE.MeshPhysicalMaterial({
+      color: 0xfff8f1,
+      emissive: 0xfef08a,
+      emissiveIntensity: 0.22,
+      roughness: 0.06,
+      metalness: 0.1,
+      iridescence: 1.0,
+    });
+
+    const clam = new THREE.Group();
+    const botValve = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.17, 0.06, 12), shellMat);
+    botValve.scale.set(1.15, 1, 0.9);
+    const topValve = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.17, 0.055, 12), shellInnerMat);
+    topValve.scale.set(1.15, 1, 0.9);
+    topValve.position.set(0, 0.17, -0.15);
+    topValve.rotation.x = -1.02;
+    const clamPearl = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 14), pearlMat);
+    clamPearl.position.set(0, 0.075, 0.01);
+    clam.add(botValve, topValve, clamPearl);
+    clam.position.set(1.08, baseY + 0.06, 0.68);
+    clam.rotation.y = -0.55;
+    this.scene.add(clam);
+
+    // 2. Delicate Translucent Aqua-Quartz Crystal Cluster near left driftwood rocks
+    const crystalMat = new THREE.MeshPhysicalMaterial({
+      color: 0x67e8f9,
+      emissive: 0x0891b2,
+      emissiveIntensity: 0.38,
+      roughness: 0.12,
+      metalness: 0.1,
+      transmission: this.isSoftwareGl ? 0 : 0.65,
+      transparent: true,
+      opacity: 0.88,
+    });
+    const crystalCluster = new THREE.Group();
+    const shards = [
+      { x: 0, h: 0.36, r: 0.055, rx: 0.08, rz: -0.1 },
+      { x: -0.09, h: 0.24, r: 0.042, rx: -0.18, rz: 0.28 },
+      { x: 0.09, h: 0.28, r: 0.046, rx: 0.16, rz: -0.26 },
+      { x: 0.03, h: 0.18, r: 0.036, rx: 0.24, rz: 0.12 },
+    ];
+    shards.forEach((s) => {
+      const shard = new THREE.Mesh(new THREE.ConeGeometry(s.r, s.h, 6), crystalMat);
+      shard.position.set(s.x, s.h * 0.45, 0);
+      shard.rotation.set(s.rx, 0.4, s.rz);
+      crystalCluster.add(shard);
+    });
+    crystalCluster.position.set(-1.95, baseY + 0.08, 0.56);
+    this.scene.add(crystalCluster);
+
+    // 3. Smooth Sea-Glass Pebbles & Spiral Shells along the front riverbed
+    const seaGlassMats = [
+      new THREE.MeshPhysicalMaterial({ color: 0x34d399, roughness: 0.22, transparent: true, opacity: 0.84 }),
+      new THREE.MeshPhysicalMaterial({ color: 0x38bdf8, roughness: 0.22, transparent: true, opacity: 0.84 }),
+      new THREE.MeshPhysicalMaterial({ color: 0xfbbf24, roughness: 0.25, transparent: true, opacity: 0.82 }),
+      new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.48 }),
+    ];
+    const pebbleSpots = [
+      { x: -0.82, z: 0.82, r: 0.055, m: 0 },
+      { x: -0.68, z: 0.94, r: 0.042, m: 1 },
+      { x: -0.38, z: 0.72, r: 0.048, m: 2 },
+      { x: 0.42, z: 0.86, r: 0.052, m: 1 },
+      { x: 1.38, z: 0.76, r: 0.045, m: 0 },
+      { x: 1.54, z: 0.62, r: 0.038, m: 3 },
+    ];
+    pebbleSpots.forEach((ps, idx) => {
+      const gem = new THREE.Mesh(new THREE.SphereGeometry(ps.r, 10, 8), seaGlassMats[ps.m]);
+      gem.scale.set(1.25, 0.55, 0.95);
+      gem.position.set(ps.x, baseY + ps.r * 0.42, ps.z);
+      gem.rotation.y = idx * 0.9;
+      this.scene.add(gem);
+    });
+
+    // Small spiral turret shell
+    const spiralShell = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.22, 8), seaGlassMats[3]);
+    spiralShell.rotation.set(Math.PI * 0.46, 0.4, 0.35);
+    spiralShell.position.set(0.05, baseY + 0.06, 0.88);
+    this.scene.add(spiralShell);
+  }
+
+  private buildMainTankFrame() {
+    // Sleek dark brushed-titanium rim framing the main aquascape so it pairs seamlessly with the Arena tank
+    const minY = this.tankBounds.minY - 0.04;
+    const maxY = this.tankBounds.maxY + 0.06;
+    const tankH = maxY - minY;
+    const halfW = 3.55;
+    const halfD = 1.98;
+
+    const frameMat = new THREE.MeshStandardMaterial({
+      color: 0x0b1120,
+      roughness: 0.34,
+      metalness: 0.84,
+    });
+    const trimAccentMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.75,
+      roughness: 0.25,
+    });
+    const cornerGlassMat = new THREE.MeshStandardMaterial({
+      color: 0xbae6fd,
+      transparent: true,
+      opacity: 0.08,
+      roughness: 0.05,
+      metalness: 0.2,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    // Slender bottom & top perimeter rails (X = 0 tank)
+    const fbBarGeom = new THREE.BoxGeometry(halfW * 2 + 0.14, 0.11, 0.11);
+    const lrBarGeom = new THREE.BoxGeometry(0.11, 0.11, halfD * 2 + 0.14);
+    [-halfD, halfD].forEach((z) => {
+      const bot = new THREE.Mesh(fbBarGeom, frameMat);
+      bot.position.set(0, minY + 0.05, z);
+      const top = new THREE.Mesh(fbBarGeom, frameMat);
+      top.position.set(0, maxY, z);
+      this.scene.add(bot, top);
+    });
+    [-halfW, halfW].forEach((x) => {
+      const bot = new THREE.Mesh(lrBarGeom, frameMat);
+      bot.position.set(x, minY + 0.05, 0);
+      const top = new THREE.Mesh(lrBarGeom, frameMat);
+      top.position.set(x, maxY, 0);
+      this.scene.add(bot, top);
+    });
+
+    // Slender corner vertical posts & soft inner meniscus edge glow
+    const postGeom = new THREE.BoxGeometry(0.09, tankH, 0.09);
+    [
+      { x: -halfW, z: -halfD },
+      { x: halfW, z: -halfD },
+      { x: -halfW, z: halfD },
+      { x: halfW, z: halfD },
+    ].forEach((cc) => {
+      const post = new THREE.Mesh(postGeom, frameMat);
+      post.position.set(cc.x, minY + tankH * 0.5, cc.z);
+      this.scene.add(post);
+    });
+
+    // Overhead slim ADA-style LED light bar suspended slightly above water surface
+    const hoodBar = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.08, 0.34), frameMat);
+    hoodBar.position.set(0, maxY + 0.12, -0.1);
+    const hoodLed = new THREE.Mesh(new THREE.BoxGeometry(5.35, 0.03, 0.2), trimAccentMat);
+    hoodLed.position.set(0, maxY + 0.075, -0.1);
+    this.scene.add(hoodBar, hoodLed);
+
+    // Side translucent glass panels for realistic aquarium depth
+    const sideGlassGeom = new THREE.PlaneGeometry(halfD * 2 - 0.1, tankH - 0.16);
+    [-halfW + 0.03, halfW - 0.03].forEach((x) => {
+      const sideWall = new THREE.Mesh(sideGlassGeom, cornerGlassMat);
+      sideWall.rotation.y = Math.PI / 2;
+      sideWall.position.set(x, minY + tankH * 0.5, 0);
+      this.scene.add(sideWall);
+    });
+  }
+
   private buildAirstoneDiffuser() {
     // Volcanic ceramic airstone diffuser anchored beneath the bubble column
     const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.88, metalness: 0.12 });
@@ -715,6 +951,33 @@ export class AquariumScene {
       aLeaf.castShadow = true;
       this.scene.add(aLeaf);
     }
+
+    // Crimson Red Cryptocoryne Rosette Accents (warm contrast against emerald flora)
+    const cryptMat = new THREE.MeshStandardMaterial({
+      color: 0x9f1239,
+      emissive: 0x4c0519,
+      emissiveIntensity: 0.18,
+      roughness: 0.34,
+      metalness: 0.08,
+      side: THREE.DoubleSide,
+    });
+    const cryptSpots = [
+      { x: -1.62, z: -0.05 },
+      { x: 1.62, z: -0.12 },
+    ];
+    cryptSpots.forEach((cs, cIdx) => {
+      for (let k = 0; k < 5; k++) {
+        const cShape = new THREE.Shape();
+        cShape.moveTo(0, 0);
+        cShape.bezierCurveTo(0.08, 0.14, 0.1, 0.32, 0.0, 0.42);
+        cShape.bezierCurveTo(-0.1, 0.32, -0.08, 0.14, 0, 0);
+        const cLeaf = new THREE.Mesh(new THREE.ShapeGeometry(cShape, 7), cryptMat);
+        const angle = (k / 5) * Math.PI * 2 + cIdx * 0.4;
+        cLeaf.position.set(cs.x, this.tankBounds.minY + 0.14, cs.z);
+        cLeaf.rotation.set(-0.55 - (k % 2) * 0.15, angle, 0.12);
+        this.scene.add(cLeaf);
+      }
+    });
 
     // Marimo Moss Balls Trio
     const mossCanvas = document.createElement('canvas');
@@ -1703,10 +1966,11 @@ export class AquariumScene {
   private updateFood(delta: number, time: number) {
     if (this.foodPellets.length === 0) {
       this.fish.prepareBite(false);
+      this.fish.calmExcitement();
       return;
     }
 
-    // Compute exact world snout position along fish heading & pitch (fishRoot scale = 0.62, snout = 0.90)
+    // Compute exact world snout position along fish heading & pitch (YZX order, mouthReach = 0.52)
     const heading = this.fish.group.rotation.y;
     const pitch = this.fish.group.rotation.z;
     const mouthReach = 0.52;
@@ -1738,7 +2002,7 @@ export class AquariumScene {
 
       if (!this.fighterMode) {
         const distSq = p.mesh.position.distanceToSquared(_mouthPos);
-        if (distSq < 0.48 * 0.48) {
+        if (distSq < 0.52 * 0.52) {
           retroAudio.playChomp();
           this.fish.triggerGulp();
           this.createTapRipple(p.mesh.position, 0.38);
@@ -1774,17 +2038,19 @@ export class AquariumScene {
       }
     }
 
-    // Active continuous tracking & bite anticipation toward the nearest pellet
+    // Active smooth tracking & bite anticipation toward the nearest pellet
     if (!this.fighterMode && nearestPellet) {
       this.fish.prepareBite(nearestDistSq < 0.85 * 0.85);
-      if (
-        !this.fish.isExcited ||
-        this.fish.targetPosition.distanceToSquared(nearestPellet.mesh.position) > 0.05
-      ) {
-        this.fish.swimTo(nearestPellet.mesh.position, true);
+      const aimY = Math.min(nearestPellet.mesh.position.y, this.tankBounds.maxY - 0.28);
+      if (!this.fish.isExcited) {
+        _hitPoint.set(nearestPellet.mesh.position.x, aimY, nearestPellet.mesh.position.z);
+        this.fish.swimTo(_hitPoint, true);
+      } else {
+        this.fish.targetPosition.set(nearestPellet.mesh.position.x, aimY, nearestPellet.mesh.position.z);
       }
     } else {
       this.fish.prepareBite(false);
+      this.fish.calmExcitement();
     }
   }
 
@@ -1921,29 +2187,237 @@ export class AquariumScene {
 
   public playFighterMove(
     actor: 'player' | 'opponent',
-    kind: 'light' | 'heavy' | 'ultimate' | 'guard_on' | 'guard_off' | 'hit'
+    kind:
+      | 'light'
+      | 'heavy'
+      | 'ultimate'
+      | 'parry'
+      | 'windup'
+      | 'guard_on'
+      | 'guard_off'
+      | 'hit'
+      | 'crit_hit'
   ) {
     const fishObj = actor === 'player' ? this.fish : this.opponentFish;
     const dirX = actor === 'player' ? 1 : -1;
 
+    if (kind === 'windup') {
+      fishObj.triggerCombatWindup(dirX, true);
+      this.spawnCombatImpactVfx(
+        fishObj.currentPosition.x,
+        fishObj.currentPosition.y,
+        fishObj.currentPosition.z + 0.1,
+        0xf43f5e,
+        'windup'
+      );
+      return;
+    }
     if (kind === 'guard_on') {
       fishObj.setCombatGuard(true);
-      this.createTapRipple(fishObj.currentPosition, 0.7);
+      this.createTapRipple(fishObj.currentPosition, 0.85);
       return;
     }
     if (kind === 'guard_off') {
       fishObj.setCombatGuard(false);
       return;
     }
-    if (kind === 'hit') {
-      fishObj.triggerCombatHit(-dirX);
-      this.createTapRipple(fishObj.currentPosition, 1.0);
+    if (kind === 'hit' || kind === 'crit_hit') {
+      const isCrit = kind === 'crit_hit';
+      fishObj.triggerCombatHit(-dirX, isCrit);
+      this.createTapRipple(fishObj.currentPosition, isCrit ? 1.55 : 1.05);
+      if (isCrit) {
+        this.arenaShakeIntensity = Math.max(this.arenaShakeIntensity, 0.18);
+      }
       return;
     }
 
     fishObj.triggerCombatStrike(dirX, kind);
-    const impactScale = kind === 'ultimate' ? 2.0 : kind === 'heavy' ? 1.35 : 0.85;
-    this.createTapRipple(new THREE.Vector3(this.arenaCenterX, 0.25, 0.25), impactScale);
+    const impactX = this.arenaCenterX + dirX * 0.25;
+    const impactColor =
+      kind === 'ultimate'
+        ? 0xfacc15
+        : kind === 'parry'
+        ? 0x38bdf8
+        : kind === 'heavy'
+        ? actor === 'player'
+          ? 0xf97316
+          : 0xef4444
+        : actor === 'player'
+        ? 0x67e8f9
+        : 0xfb7185;
+
+    this.spawnCombatImpactVfx(impactX, 0.28, 0.3, impactColor, kind);
+    const impactScale =
+      kind === 'ultimate' ? 2.4 : kind === 'parry' ? 1.9 : kind === 'heavy' ? 1.5 : 0.95;
+    this.createTapRipple(new THREE.Vector3(impactX, 0.25, 0.25), impactScale);
+
+    if (kind === 'ultimate') {
+      this.arenaShakeIntensity = 0.32;
+      this.arenaImpactZoom = 0.65;
+      this.arenaFlashIntensity = 3.2;
+    } else if (kind === 'parry') {
+      this.arenaShakeIntensity = 0.24;
+      this.arenaImpactZoom = 0.45;
+      this.arenaFlashIntensity = 2.4;
+    } else if (kind === 'heavy') {
+      this.arenaShakeIntensity = 0.16;
+      this.arenaImpactZoom = 0.28;
+      this.arenaFlashIntensity = 1.6;
+    } else {
+      this.arenaShakeIntensity = Math.max(this.arenaShakeIntensity, 0.06);
+      this.arenaFlashIntensity = Math.max(this.arenaFlashIntensity, 0.8);
+    }
+  }
+
+  private spawnCombatImpactVfx(
+    x: number,
+    y: number,
+    z: number,
+    colorHex: number,
+    kind: 'light' | 'heavy' | 'ultimate' | 'parry' | 'windup'
+  ) {
+    if (kind === 'windup') {
+      const ringGeom = new THREE.RingGeometry(0.18, 0.25, 24);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: colorHex,
+        transparent: true,
+        opacity: 0.85,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const ringMesh = new THREE.Mesh(ringGeom, ringMat);
+      ringMesh.position.set(x, y, z);
+      this.combatVfxGroup.add(ringMesh);
+      this.activeCombatVfx.push({
+        mesh: ringMesh,
+        material: ringMat,
+        vel: new THREE.Vector3(0, 0, 0),
+        life: 0,
+        maxLife: 0.48,
+        scaleSpeed: 2.8,
+        kind: 'ring',
+      });
+      return;
+    }
+
+    // 1. Slashing Crescent Arc
+    const arcLen = kind === 'ultimate' ? Math.PI * 1.45 : kind === 'heavy' || kind === 'parry' ? Math.PI * 1.1 : Math.PI * 0.85;
+    const slashGeom = new THREE.RingGeometry(
+      kind === 'ultimate' ? 0.42 : 0.28,
+      kind === 'ultimate' ? 0.62 : 0.4,
+      20,
+      1,
+      -arcLen * 0.5,
+      arcLen
+    );
+    const slashMat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const slash = new THREE.Mesh(slashGeom, slashMat);
+    slash.position.set(x, y, z);
+    slash.rotation.z = (Math.random() - 0.5) * 1.6;
+    slash.rotation.y = (Math.random() - 0.5) * 0.4;
+    this.combatVfxGroup.add(slash);
+    this.activeCombatVfx.push({
+      mesh: slash,
+      material: slashMat,
+      vel: new THREE.Vector3(0, 0, 0),
+      life: 0,
+      maxLife: kind === 'ultimate' ? 0.46 : 0.3,
+      scaleSpeed: kind === 'ultimate' ? 4.8 : 3.4,
+      kind: 'slash',
+    });
+
+    // 2. Shockwave Pressure Ring
+    if (kind === 'heavy' || kind === 'ultimate' || kind === 'parry') {
+      const shockGeom = new THREE.RingGeometry(0.12, 0.22, 28);
+      const shockMat = new THREE.MeshBasicMaterial({
+        color: kind === 'ultimate' ? 0xfef08a : 0xffffff,
+        transparent: true,
+        opacity: 0.88,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const shock = new THREE.Mesh(shockGeom, shockMat);
+      shock.position.set(x, y, z + 0.05);
+      this.combatVfxGroup.add(shock);
+      this.activeCombatVfx.push({
+        mesh: shock,
+        material: shockMat,
+        vel: new THREE.Vector3(0, 0, 0),
+        life: 0,
+        maxLife: kind === 'ultimate' ? 0.55 : 0.38,
+        scaleSpeed: kind === 'ultimate' ? 7.2 : 5.0,
+        kind: 'ring',
+      });
+    }
+
+    // 3. Radial Hydro-Energy Sparks & Bubbles
+    const sparkCount = kind === 'ultimate' ? 22 : kind === 'heavy' || kind === 'parry' ? 14 : 8;
+    const sparkGeom = new THREE.SphereGeometry(kind === 'ultimate' ? 0.05 : 0.036, 6, 6);
+    for (let i = 0; i < sparkCount; i++) {
+      const ang = (i / sparkCount) * Math.PI * 2 + Math.random() * 0.35;
+      const spd = (kind === 'ultimate' ? 3.8 : 2.6) + Math.random() * 1.8;
+      const sparkMat = new THREE.MeshBasicMaterial({
+        color: i % 2 === 0 ? colorHex : 0xffffff,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const spark = new THREE.Mesh(sparkGeom, sparkMat);
+      spark.position.set(x, y, z);
+      this.combatVfxGroup.add(spark);
+      this.activeCombatVfx.push({
+        mesh: spark,
+        material: sparkMat,
+        vel: new THREE.Vector3(
+          Math.cos(ang) * spd,
+          Math.sin(ang) * spd * 0.85,
+          (Math.random() - 0.5) * 1.4
+        ),
+        life: 0,
+        maxLife: 0.36 + Math.random() * 0.22,
+        scaleSpeed: 0,
+        kind: 'spark',
+      });
+    }
+  }
+
+  private updateCombatVfx(delta: number) {
+    for (let i = this.activeCombatVfx.length - 1; i >= 0; i--) {
+      const item = this.activeCombatVfx[i];
+      item.life += delta;
+      const t = item.life / item.maxLife;
+      if (t >= 1) {
+        this.combatVfxGroup.remove(item.mesh);
+        item.mesh.geometry.dispose();
+        item.material.dispose();
+        this.activeCombatVfx.splice(i, 1);
+        continue;
+      }
+
+      if (item.kind === 'spark') {
+        item.mesh.position.addScaledVector(item.vel, delta);
+        item.vel.multiplyScalar(Math.exp(-4.8 * delta));
+        item.mesh.scale.setScalar(Math.max(0.05, 1 - t));
+        item.material.opacity = 0.95 * (1 - t);
+      } else if (item.kind === 'slash') {
+        item.mesh.scale.setScalar(1 + t * item.scaleSpeed);
+        item.mesh.rotation.z += delta * 4.5;
+        item.material.opacity = 0.95 * (1 - t * t);
+      } else {
+        item.mesh.scale.setScalar(1 + t * item.scaleSpeed);
+        item.material.opacity = 0.88 * (1 - t);
+      }
+    }
   }
 
   private startLoop() {
@@ -1964,6 +2438,7 @@ export class AquariumScene {
       this.updatePlankton(delta);
       this.updateFood(delta, time);
       this.updateRipples(delta);
+      this.updateCombatVfx(delta);
       this.updateThemeProps(delta, time);
 
       // Animate Arena corner energy crystals
@@ -1988,6 +2463,20 @@ export class AquariumScene {
         pos.needsUpdate = true;
       }
 
+      // Subtle living water surface ripple motion (zero GC)
+      if (this.waterSurfaceMesh && this.waterSurfaceOrigY) {
+        const wPos = this.waterSurfaceMesh.geometry.attributes.position;
+        for (let i = 0; i < wPos.count; i++) {
+          const wx = wPos.getX(i);
+          const wz = wPos.getZ(i);
+          const wave =
+            Math.sin(wx * 1.15 + time * 1.7) * 0.028 +
+            Math.cos(wz * 1.5 - time * 1.35) * 0.02;
+          wPos.setY(i, this.waterSurfaceOrigY[i] + wave);
+        }
+        wPos.needsUpdate = true;
+      }
+
       // Smoothly transition crimson Fighter Arena atmosphere & camera slide
       const targetBlend = this.fighterMode ? 1 : 0;
       const nextBlend = THREE.MathUtils.damp(this.fighterBlend, targetBlend, 4.0, delta);
@@ -1996,24 +2485,35 @@ export class AquariumScene {
         this.updateAtmosphereBlend();
       }
 
+      // Decay combat screen shake, impact zoom punch & light flash
+      this.arenaShakeIntensity *= Math.exp(-11.0 * delta);
+      this.arenaImpactZoom = THREE.MathUtils.damp(this.arenaImpactZoom, 0, 8.0, delta);
+      this.arenaFlashIntensity *= Math.exp(-9.0 * delta);
+
       if (this.arenaBackRedLight) {
-        this.arenaBackRedLight.intensity = 2.6 + Math.sin(time * 2.8) * 0.55;
+        this.arenaBackRedLight.intensity = 2.6 + Math.sin(time * 2.8) * 0.55 + this.arenaFlashIntensity;
+      }
+      if (this.arenaCyanLight) {
+        this.arenaCyanLight.intensity = 1.8 + this.arenaFlashIntensity * 0.7;
       }
 
       // Smooth horizontal slide between Aquarium (X=0) and PvP Fighter Arena (X=12)
+      const shakeX = this.arenaShakeIntensity > 0.003 ? (Math.random() - 0.5) * this.arenaShakeIntensity : 0;
+      const shakeY = this.arenaShakeIntensity > 0.003 ? (Math.random() - 0.5) * this.arenaShakeIntensity : 0;
+
       const targetCamX = this.fighterMode
         ? this.arenaCenterX
         : THREE.MathUtils.clamp(this.fish.currentPosition.x * 0.16, -0.5, 0.5);
       const targetCamY = this.fighterMode
         ? 0.42
         : THREE.MathUtils.clamp(0.24 + this.fish.currentPosition.y * 0.12, -0.2, 0.6);
-      const targetCamZ = this.fighterMode ? this.arenaAspectZ : this.currentCameraPos.z;
+      const targetCamZ = this.fighterMode ? this.arenaAspectZ - this.arenaImpactZoom : this.currentCameraPos.z;
       const targetLookX = this.fighterMode ? this.arenaCenterX : 0;
       const targetLookY = this.fighterMode ? 0.18 : 0.12;
 
-      const camLambda = this.fighterMode ? 4.4 : 3.4;
-      this.camera.position.x = THREE.MathUtils.damp(this.camera.position.x, targetCamX, camLambda, delta);
-      this.camera.position.y = THREE.MathUtils.damp(this.camera.position.y, targetCamY, camLambda, delta);
+      const camLambda = this.fighterMode ? 4.8 : 3.4;
+      this.camera.position.x = THREE.MathUtils.damp(this.camera.position.x, targetCamX, camLambda, delta) + shakeX;
+      this.camera.position.y = THREE.MathUtils.damp(this.camera.position.y, targetCamY, camLambda, delta) + shakeY;
       this.camera.position.z = THREE.MathUtils.damp(this.camera.position.z, targetCamZ, camLambda, delta);
 
       this.cameraTarget.x = THREE.MathUtils.damp(this.cameraTarget.x, targetLookX, camLambda, delta);
@@ -2089,6 +2589,7 @@ export class AquariumScene {
     }
     this.disposeGroupResources(this.decorGroup);
     this.disposeGroupResources(this.arenaGroup);
+    this.disposeGroupResources(this.combatVfxGroup);
     this.fish.dispose();
     this.opponentFish.dispose();
     this.causticTexture.dispose();

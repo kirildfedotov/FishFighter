@@ -72,11 +72,35 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
           {/* Left: Fish Identity & Level */}
           <div className="flex items-center gap-3">
-            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-cyan-500/20 to-indigo-600/30 border border-white/15 flex items-center justify-center shrink-0">
-              <span className="text-xl sm:text-2xl">🐟</span>
+            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-cyan-500/25 via-blue-600/20 to-indigo-700/35 border border-cyan-300/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] flex items-center justify-center shrink-0">
+              <svg viewBox="0 0 36 28" className="w-6 h-5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]" aria-hidden="true">
+                <defs>
+                  <linearGradient id="hdrBettaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#67e8f9" />
+                    <stop offset="55%" stopColor="#3b82f6" />
+                    <stop offset="100%" stopColor="#1e3a8a" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M15 14 C10 5, 3 2, 3 8 C6 10, 3 12, 2 14 C3 16, 6 18, 3 20 C3 26, 10 23, 15 14 Z"
+                  fill="url(#hdrBettaGrad)"
+                  stroke="#bae6fd"
+                  strokeWidth="0.9"
+                />
+                <path d="M17 10 C16 4, 23 3, 25 8 C25 10, 21 11, 18 11 Z" fill="url(#hdrBettaGrad)" />
+                <path d="M16 18 C14 24, 23 26, 26 21 C26 18, 21 18, 18 18 Z" fill="url(#hdrBettaGrad)" />
+                <path
+                  d="M14 14 C16 10, 24 9, 30 12 C33 13, 34 14, 33 15.5 C31 17.5, 26 19, 20 18.5 C16.5 18, 14.5 16, 14 14 Z"
+                  fill="#60a5fa"
+                  stroke="#e0f2fe"
+                  strokeWidth="0.9"
+                />
+                <circle cx="29.5" cy="13.5" r="1.3" fill="#0f172a" />
+                <circle cx="29.9" cy="13.1" r="0.45" fill="#ffffff" />
+              </svg>
               {stats.isVip && (
                 <span
-                  className="absolute -top-1.5 -right-1.5 text-[9px] bg-amber-400 text-slate-950 font-extrabold px-1.5 py-0.2 rounded-md shadow"
+                  className="absolute -top-1.5 -right-1.5 text-[9px] bg-gradient-to-b from-amber-300 to-amber-500 text-slate-950 font-extrabold px-1.5 py-0.2 rounded-md border border-amber-100/60 shadow"
                   title="VIP статус"
                 >
                   VIP
@@ -112,7 +136,7 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
                 ) : (
                   <button
                     type="button"
-                    className="flex items-center gap-1.5 group cursor-pointer text-left"
+                    className="flex items-center gap-1.5 group cursor-pointer text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
                     onClick={() => {
                       setTempName(stats.name);
                       setIsEditingName(true);
@@ -121,7 +145,7 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
                     <span className="font-display font-bold text-sm sm:text-base text-white tracking-tight truncate">
                       {stats.name}
                     </span>
-                    <Edit2 className="w-3.5 h-3.5 text-slate-400 opacity-60 group-hover:opacity-100 transition" />
+                    <Edit2 className="w-3.5 h-3.5 text-slate-400 opacity-55 group-hover:opacity-100 transition" />
                   </button>
                 )}
               </div>
@@ -129,15 +153,15 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
               {/* Level · EXP · Age */}
               <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-300">
                 <span className="font-semibold text-cyan-300 tabular-nums">Ур. {stats.level}</span>
-                <div className="w-16 sm:w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="w-16 sm:w-24 h-1.5 bg-slate-900/90 border border-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-300 rounded-full"
+                    className="h-full bg-gradient-to-r from-cyan-400 to-blue-400 progress-sheen transition-all duration-300 rounded-full"
                     style={{
                       width: `${Math.min(100, (stats.experience / stats.maxExperience) * 100)}%`,
                     }}
                   />
                 </div>
-                <span className="text-slate-400 tabular-nums hidden xs:inline">
+                <span className="text-slate-400 tabular-nums hidden sm:inline">
                   · {stats.ageDays} дн.
                 </span>
               </div>
@@ -145,16 +169,16 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
           </div>
 
           {/* Center (Desktop): Vitality Bars */}
-          <div className="hidden lg:flex items-center gap-4 bg-slate-900/60 border border-white/10 px-4 py-1.5 rounded-xl">
+          <div className="hidden lg:flex items-center gap-4 bg-slate-950/65 border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] px-4 py-1.5 rounded-xl">
             <div className="flex items-center gap-2" title="Сытость">
               <span className="text-xs text-slate-300 font-medium">Сытость</span>
-              <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-16 h-2 bg-slate-900 border border-white/10 rounded-full overflow-hidden">
                 <div
-                  className={`h-full bg-gradient-to-r ${getBarGradient(stats.hunger)} transition-all duration-300 rounded-full`}
+                  className={`h-full bg-gradient-to-r ${getBarGradient(stats.hunger)} progress-sheen transition-all duration-300 rounded-full`}
                   style={{ width: `${stats.hunger}%` }}
                 />
               </div>
-              <span className="text-xs font-mono tabular-nums text-slate-200 w-8 text-right">
+              <span className="text-xs font-mono tabular-nums text-slate-100 w-8 text-right">
                 {stats.hunger}%
               </span>
             </div>
@@ -163,13 +187,13 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
 
             <div className="flex items-center gap-2" title="Чистота воды">
               <span className="text-xs text-slate-300 font-medium">Чистота</span>
-              <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-16 h-2 bg-slate-900 border border-white/10 rounded-full overflow-hidden">
                 <div
-                  className={`h-full bg-gradient-to-r ${getBarGradient(stats.cleanliness)} transition-all duration-300 rounded-full`}
+                  className={`h-full bg-gradient-to-r ${getBarGradient(stats.cleanliness)} progress-sheen transition-all duration-300 rounded-full`}
                   style={{ width: `${stats.cleanliness}%` }}
                 />
               </div>
-              <span className="text-xs font-mono tabular-nums text-slate-200 w-8 text-right">
+              <span className="text-xs font-mono tabular-nums text-slate-100 w-8 text-right">
                 {stats.cleanliness}%
               </span>
             </div>
@@ -178,13 +202,13 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
 
             <div className="flex items-center gap-2" title="Настроение">
               <span className="text-xs text-slate-300 font-medium">Радость</span>
-              <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-16 h-2 bg-slate-900 border border-white/10 rounded-full overflow-hidden">
                 <div
-                  className={`h-full bg-gradient-to-r ${getBarGradient(stats.happiness)} transition-all duration-300 rounded-full`}
+                  className={`h-full bg-gradient-to-r ${getBarGradient(stats.happiness)} progress-sheen transition-all duration-300 rounded-full`}
                   style={{ width: `${stats.happiness}%` }}
                 />
               </div>
-              <span className="text-xs font-mono tabular-nums text-slate-200 w-8 text-right">
+              <span className="text-xs font-mono tabular-nums text-slate-100 w-8 text-right">
                 {stats.happiness}%
               </span>
             </div>
@@ -192,10 +216,10 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
 
           {/* Right: Currency & Settings Gear */}
           <div className="flex items-center gap-2" ref={settingsRef}>
-            <div className="flex items-center gap-3 px-2.5 py-1.5 rounded-xl bg-slate-900/75 border border-white/10 text-xs font-mono font-bold">
-              <span className="text-amber-300 tabular-nums">🪙 {stats.coins}</span>
+            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-950/75 border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] text-xs font-mono font-bold">
+              <span className="text-amber-300 tabular-nums whitespace-nowrap">🪙 {stats.coins}</span>
               <span className="text-white/15">|</span>
-              <span className="text-fuchsia-300 tabular-nums">🦪 {stats.pearls}</span>
+              <span className="text-fuchsia-300 tabular-nums whitespace-nowrap">🦪 {stats.pearls}</span>
             </div>
 
             <button

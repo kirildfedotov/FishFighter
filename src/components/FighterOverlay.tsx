@@ -111,6 +111,13 @@ export const RIVAL_ROSTER: RivalProfile[] = [
 type FighterPhase = 'lobby' | 'fighting' | 'result';
 type LobbyTab = 'opponents' | 'standings';
 
+interface FloatingCallout {
+  id: number;
+  text: string;
+  side: 'player' | 'opponent';
+  tone: 'cyan' | 'orange' | 'gold' | 'rose' | 'parry';
+}
+
 interface FighterOverlayProps {
   stats: FishStats;
   rivalIndex: number;
@@ -118,7 +125,16 @@ interface FighterOverlayProps {
   onFightStateChange?: (isFighting: boolean) => void;
   onMove: (
     actor: 'player' | 'opponent',
-    kind: 'light' | 'heavy' | 'ultimate' | 'guard_on' | 'guard_off' | 'hit'
+    kind:
+      | 'light'
+      | 'heavy'
+      | 'ultimate'
+      | 'parry'
+      | 'windup'
+      | 'guard_on'
+      | 'guard_off'
+      | 'hit'
+      | 'crit_hit'
   ) => void;
   onMatchEnd: (
     won: boolean,
@@ -155,10 +171,12 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
   const [matchResult, setMatchResult] = useState<'none' | 'win' | 'lose'>('none');
   const [lastRatingDelta, setLastRatingDelta] = useState(0);
 
-  // Cooldowns in seconds
+  // Cooldowns & combo state
   const [heavyCd, setHeavyCd] = useState(0);
   const [guardCd, setGuardCd] = useState(0);
   const [actionLock, setActionLock] = useState(false);
+  const [comboCount, setComboCount] = useState(0);
+  const [floatingCallouts, setFloatingCallouts] = useState<FloatingCallout[]>([]);
 
   const isGuardingRef = useRef(isGuarding);
   const matchResultRef = useRef(matchResult);
@@ -166,6 +184,10 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
   const onMoveRef = useRef(onMove);
   const onMatchEndRef = useRef(onMatchEnd);
   const onFightStateChangeRef = useRef(onFightStateChange);
+  const rivalTelegraphActiveRef = useRef(false);
+  const comboTimerRef = useRef<number | undefined>(undefined);
+  const guardTimerRef = useRef<number | undefined>(undefined);
+  const calloutIdRef = useRef(1);
 
   isGuardingRef.current = isGuarding;
   matchResultRef.current = matchResult;
@@ -173,6 +195,24 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
   onMoveRef.current = onMove;
   onMatchEndRef.current = onMatchEnd;
   onFightStateChangeRef.current = onFightStateChange;
+
+  const pushCallout = useCallback(
+    (text: string, side: FloatingCallout['side'], tone: FloatingCallout['tone']) => {
+      const id = calloutIdRef.current++;
+      setFloatingCallouts((prev) => [...prev.slice(-6), { id, text, side, tone }]);
+      window.setTimeout(() => {
+        setFloatingCallouts((prev) => prev.filter((item) => item.id !== id));
+      }, 950);
+    },
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+      if (guardTimerRef.current) clearTimeout(guardTimerRef.current);
+    };
+  }, []);
 
   const defeatedList = useMemo(() => stats.defeatedRivals ?? [], [stats.defeatedRivals]);
   const playerWins = stats.fighterWins ?? 0;
@@ -219,6 +259,9 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
 
   // Reset match state cleanly
   const prepareMatchState = useCallback(() => {
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    if (guardTimerRef.current) clearTimeout(guardTimerRef.current);
+    rivalTelegraphActiveRef.current = false;
     setPlayerHp(playerMaxHp);
     setRivalHp(rival.maxHp);
     setPlayerRage(0);
@@ -227,9 +270,11 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
     setHeavyCd(0);
     setGuardCd(0);
     setActionLock(false);
+    setComboCount(0);
+    setFloatingCallouts([]);
     setMatchResult('none');
     matchResultRef.current = 'none';
-    setStatusBanner(`Бой против: ${rival.name}`);
+    setStatusBanner(`Бой против: ${rival.name} · Копите комбо и парируйте Щитом!`);
     onMoveRef.current('player', 'guard_off');
   }, [playerMaxHp, rival.maxHp, rival.name]);
 
@@ -243,8 +288,13 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
 
   const backToLobby = useCallback(() => {
     retroAudio.playBlip(440, 0.05);
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    if (guardTimerRef.current) clearTimeout(guardTimerRef.current);
+    rivalTelegraphActiveRef.current = false;
     setIsGuarding(false);
     setRivalCharging(false);
+    setComboCount(0);
+    setFloatingCallouts([]);
     setMatchResult('none');
     matchResultRef.current = 'none';
     setPhase('lobby');
@@ -320,31 +370,39 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
     let strikeTimer: number | undefined;
 
     const scheduleNextAi = () => {
-      const delay = 2000 + Math.random() * 1400;
+      const delay = 1950 + Math.random() * 1350;
       telegraphTimer = window.setTimeout(() => {
         if (matchResultRef.current !== 'none' || phaseRef.current !== 'fighting') return;
 
-        const isHeavy = Math.random() > 0.45;
+        const isHeavy = Math.random() > 0.42;
+        rivalTelegraphActiveRef.current = true;
         setRivalCharging(true);
+        onMoveRef.current('opponent', 'windup');
         setStatusBanner(
           isHeavy
-            ? `${rival.name} готовит мощный таран — активируйте ЩИТ!`
-            : `${rival.name} идёт в атаку!`
+            ? `${rival.name} заряжает сокрушительный таран — ЩИТ [Space] для парирования!`
+            : `${rival.name} замахивается — время для ЩИТА [Space]!`
         );
         retroAudio.playBlip(340, 0.06);
 
         strikeTimer = window.setTimeout(() => {
           if (matchResultRef.current !== 'none' || phaseRef.current !== 'fighting') return;
+          const wasTelegraphed = rivalTelegraphActiveRef.current;
+          rivalTelegraphActiveRef.current = false;
           setRivalCharging(false);
 
           onMoveRef.current('opponent', isHeavy ? 'heavy' : 'light');
 
           if (isGuardingRef.current) {
-            retroAudio.playBlip(880, 0.08);
-            const parryDmg = 10 + stats.level * 2;
-            setStatusBanner(`Блок и контратака! -${parryDmg} HP сопернику`);
-            onMoveRef.current('opponent', 'hit');
+            retroAudio.playFlare();
+            retroAudio.playBlip(960, 0.08);
+            const parryDmg = wasTelegraphed ? 16 + stats.level * 3 : 12 + stats.level * 2;
+            setStatusBanner(`ПАРИРОВАНИЕ! Мощная контратака -${parryDmg} HP`);
+            onMoveRef.current('player', 'parry');
+            window.setTimeout(() => onMoveRef.current('opponent', 'crit_hit'), 90);
+            pushCallout(`ПАРИРОВАНИЕ! -${parryDmg}`, 'opponent', 'parry');
 
+            setGuardCd((cd) => Math.min(cd, 1.1));
             setRivalHp((prev) => {
               const next = Math.max(0, prev - parryDmg);
               if (next <= 0) {
@@ -352,12 +410,15 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
               }
               return next;
             });
-            setPlayerRage((r) => Math.min(100, r + 20));
+            setPlayerRage((r) => Math.min(100, r + 35));
           } else {
             retroAudio.playKnock();
-            onMoveRef.current('player', 'hit');
-            const rawDmg = isHeavy ? Math.round(rival.attackPower * 1.35) : rival.attackPower;
+            onMoveRef.current('player', isHeavy ? 'crit_hit' : 'hit');
+            const rawDmg = isHeavy ? Math.round(rival.attackPower * 1.38) : rival.attackPower;
+            setComboCount(0);
+            if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
             setStatusBanner(`${rival.name} наносит удар (-${rawDmg} HP)`);
+            pushCallout(`-${rawDmg}`, 'player', 'rose');
 
             setPlayerHp((prev) => {
               const next = Math.max(0, prev - rawDmg);
@@ -366,81 +427,181 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
               }
               return next;
             });
-            setPlayerRage((r) => Math.min(100, r + 15));
+            setPlayerRage((r) => Math.min(100, r + 16));
           }
 
           if (matchResultRef.current === 'none' && phaseRef.current === 'fighting') {
             scheduleNextAi();
           }
-        }, isHeavy ? 880 : 620);
+        }, isHeavy ? 920 : 660);
       }, delay);
     };
 
     scheduleNextAi();
 
     return () => {
+      rivalTelegraphActiveRef.current = false;
       if (telegraphTimer) clearTimeout(telegraphTimer);
       if (strikeTimer) clearTimeout(strikeTimer);
     };
-  }, [phase, matchResult, rival.attackPower, rival.name, stats.level, finishMatch]);
+  }, [phase, matchResult, rival.attackPower, rival.name, stats.level, finishMatch, pushCallout]);
 
-  const handlePlayerAttack = (kind: 'light' | 'heavy' | 'ultimate') => {
-    if (phase !== 'fighting' || matchResult !== 'none' || actionLock) return;
-    if (kind === 'heavy' && heavyCd > 0) return;
-    if (kind === 'ultimate' && playerRage < 100) return;
+  const handlePlayerAttack = useCallback(
+    (kind: 'light' | 'heavy' | 'ultimate') => {
+      if (phase !== 'fighting' || matchResult !== 'none' || actionLock) return;
+      if (kind === 'heavy' && heavyCd > 0) return;
+      if (kind === 'ultimate' && playerRage < 100) return;
 
-    setActionLock(true);
-    window.setTimeout(() => setActionLock(false), 280);
+      setActionLock(true);
+      window.setTimeout(() => setActionLock(false), 260);
 
-    const levelBonus = (stats.level - 1) * 3 + (stats.isVip ? 5 : 0);
-    let dmg = 14 + levelBonus;
-    let rageGain = 24;
+      const levelBonus = (stats.level - 1) * 3 + (stats.isVip ? 5 : 0);
+      let dmg = 14 + levelBonus;
+      let rageGain = 22;
+      let isCrit = false;
 
-    if (kind === 'heavy') {
-      dmg = 26 + levelBonus;
-      rageGain = 32;
-      setHeavyCd(3.2);
-      setStatusBanner(`Мощный таран! -${dmg} HP`);
-      retroAudio.playSplash();
-    } else if (kind === 'ultimate') {
-      dmg = 44 + levelBonus * 1.4;
-      setPlayerRage(0);
-      setStatusBanner(`Вихрь Катаны! Сокрушительный урон -${Math.round(dmg)} HP`);
-      retroAudio.playFanfare();
-    } else {
-      setStatusBanner(`Быстрый удар плавником! -${dmg} HP`);
-      retroAudio.playBlip(720, 0.05);
-    }
-
-    onMove('player', kind);
-    window.setTimeout(() => onMove('opponent', 'hit'), 120);
-
-    if (kind !== 'ultimate') {
-      setPlayerRage((r) => Math.min(100, r + rageGain));
-    }
-
-    setRivalHp((prev) => {
-      const next = Math.max(0, prev - Math.round(dmg));
-      if (next <= 0) {
-        window.setTimeout(() => finishMatch(true), 260);
+      if (kind === 'heavy') {
+        const stacks = comboCount;
+        const comboMult = 1 + stacks * 0.15;
+        dmg = Math.round((26 + levelBonus) * comboMult);
+        rageGain = 30;
+        isCrit = stacks >= 2;
+        if (stacks > 0) {
+          setComboCount(0);
+          if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+        }
+        setHeavyCd(3.2);
+        if (isCrit) {
+          setStatusBanner(`КОМБО-ТАРАН x${stacks}! Критический удар -${dmg} HP`);
+          pushCallout(`КОМБО КРИТ! -${dmg}`, 'opponent', 'gold');
+          retroAudio.playFlare();
+          retroAudio.playSplash();
+        } else if (stacks === 1) {
+          setStatusBanner(`Усиленный таран (+15%)! -${dmg} HP`);
+          pushCallout(`ТАРАН -${dmg}`, 'opponent', 'orange');
+          retroAudio.playSplash();
+        } else {
+          setStatusBanner(`Мощный таран! -${dmg} HP`);
+          pushCallout(`-${dmg}`, 'opponent', 'orange');
+          retroAudio.playSplash();
+        }
+      } else if (kind === 'ultimate') {
+        const stacks = comboCount;
+        dmg = Math.round((46 + levelBonus * 1.45) * (1 + stacks * 0.1));
+        isCrit = true;
+        if (stacks > 0) {
+          setComboCount(0);
+          if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+        }
+        setPlayerRage(0);
+        setStatusBanner(`ВИХРЬ КАТАНЫ! Сокрушительный урон -${dmg} HP`);
+        pushCallout(`УЛЬТА! -${dmg}`, 'opponent', 'gold');
+        retroAudio.playFanfare();
+      } else {
+        const nextCombo = Math.min(4, comboCount + 1);
+        setComboCount(nextCombo);
+        if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+        comboTimerRef.current = window.setTimeout(() => {
+          setComboCount(0);
+        }, 3200);
+        setStatusBanner(
+          nextCombo >= 2
+            ? `Серия x${nextCombo}! Таран усилен на +${nextCombo * 15}%`
+            : `Быстрый выпад плавником! -${dmg} HP`
+        );
+        pushCallout(nextCombo >= 2 ? `-${dmg} (x${nextCombo})` : `-${dmg}`, 'opponent', 'cyan');
+        retroAudio.playBlip(720 + nextCombo * 45, 0.05);
       }
-      return next;
-    });
-  };
 
-  const handleGuard = () => {
+      onMove('player', kind);
+      window.setTimeout(() => onMove('opponent', isCrit ? 'crit_hit' : 'hit'), 115);
+
+      if (kind !== 'ultimate') {
+        setPlayerRage((r) => Math.min(100, r + rageGain));
+      }
+
+      setRivalHp((prev) => {
+        const next = Math.max(0, prev - dmg);
+        if (next <= 0) {
+          window.setTimeout(() => finishMatch(true), 260);
+        }
+        return next;
+      });
+    },
+    [
+      phase,
+      matchResult,
+      actionLock,
+      heavyCd,
+      playerRage,
+      stats.level,
+      stats.isVip,
+      comboCount,
+      pushCallout,
+      onMove,
+      finishMatch,
+    ]
+  );
+
+  const handleGuard = useCallback(() => {
     if (phase !== 'fighting' || matchResult !== 'none' || guardCd > 0 || isGuarding) return;
     setIsGuarding(true);
-    setGuardCd(3.0);
+    setGuardCd(2.8);
     onMove('player', 'guard_on');
-    retroAudio.playBlip(540, 0.06);
-    setStatusBanner('Водяной щит активирован!');
+    retroAudio.playBlip(560, 0.06);
+    setStatusBanner(
+      rivalTelegraphActiveRef.current
+        ? 'Щит поднят вовремя — готовьтесь к парированию!'
+        : 'Водяной щит активирован!'
+    );
 
-    window.setTimeout(() => {
+    if (guardTimerRef.current) clearTimeout(guardTimerRef.current);
+    guardTimerRef.current = window.setTimeout(() => {
       setIsGuarding(false);
       onMoveRef.current('player', 'guard_off');
-    }, 1250);
-  };
+    }, 1300);
+  }, [phase, matchResult, guardCd, isGuarding, onMove]);
+
+  // Responsive layout-independent keyboard hotkeys during active PvP combat
+  useEffect(() => {
+    if (phase !== 'fighting' || matchResult !== 'none') return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+
+      switch (e.code) {
+        case 'KeyQ':
+        case 'Digit1':
+        case 'KeyA':
+          e.preventDefault();
+          handlePlayerAttack('light');
+          break;
+        case 'KeyW':
+        case 'Digit2':
+        case 'KeyS':
+          e.preventDefault();
+          handlePlayerAttack('heavy');
+          break;
+        case 'KeyE':
+        case 'Digit3':
+        case 'Space':
+          e.preventDefault();
+          handleGuard();
+          break;
+        case 'KeyR':
+        case 'Digit4':
+        case 'KeyF':
+          e.preventDefault();
+          handlePlayerAttack('ultimate');
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [phase, matchResult, handlePlayerAttack, handleGuard]);
 
   const playerPct = Math.max(0, Math.round((playerHp / playerMaxHp) * 100));
   const rivalPct = Math.max(0, Math.round((rivalHp / rival.maxHp) * 100));
@@ -535,16 +696,16 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                           retroAudio.playBlip(620, 0.05);
                           onSelectRival(idx);
                         }}
-                        className={`text-left p-2.5 sm:p-3 rounded-xl border transition-all ${
+                        className={`text-left p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70 ${
                           isSelected
-                            ? 'bg-rose-950/85 border-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.28)]'
+                            ? 'bg-gradient-to-b from-rose-950/90 to-slate-950/95 border-rose-400/80 shadow-[0_0_24px_rgba(244,63,94,0.28),inset_0_1px_0_rgba(253,164,175,0.25)]'
                             : 'bg-slate-900/85 border-white/10 hover:border-white/25 hover:bg-slate-800/85'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-1.5 mb-1">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white/15"
                               style={{ backgroundColor: item.accentHex }}
                             />
                             <span className="font-bold text-xs sm:text-sm text-white truncate">
@@ -563,10 +724,10 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                           {item.title} · {item.difficulty}
                         </div>
 
-                        <div className="flex items-center justify-between text-[11px] font-mono text-slate-300">
+                        <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-300 pt-1.5 border-t border-white/10">
                           <span>HP {item.maxHp}</span>
                           <span>АТК {item.attackPower}</span>
-                          <span className="text-amber-300">+{item.rewardCoins} 🪙</span>
+                          <span className="text-amber-300 font-bold">+{item.rewardCoins} 🪙</span>
                         </div>
                       </button>
                     );
@@ -752,16 +913,16 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                   {playerHp}/{playerMaxHp}
                 </span>
               </div>
-              <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden border border-white/10">
+              <div className="h-2.5 bg-slate-950 rounded-full overflow-hidden border border-white/15">
                 <div
-                  className="h-full bg-gradient-to-r from-cyan-500 to-sky-400 transition-all duration-200"
+                  className="h-full bg-gradient-to-r from-cyan-500 to-sky-400 progress-sheen transition-all duration-200"
                   style={{ width: `${playerPct}%` }}
                 />
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-slate-950 rounded-full overflow-hidden border border-white/10">
                   <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-yellow-300 transition-all duration-200"
+                    className="h-full bg-gradient-to-r from-amber-500 to-yellow-300 progress-sheen transition-all duration-200"
                     style={{ width: `${playerRage}%` }}
                   />
                 </div>
@@ -772,7 +933,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
             </div>
 
             {/* VS Center Divider */}
-            <div className="font-display font-extrabold text-sm sm:text-lg text-rose-400 px-1.5">
+            <div className="font-display font-extrabold text-sm sm:text-lg text-rose-400 px-2 py-1 rounded-lg bg-rose-500/10 border border-rose-400/25">
               VS
             </div>
 
@@ -786,25 +947,25 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                   {rival.name}
                 </span>
               </div>
-              <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden border border-white/10">
+              <div className="h-2.5 bg-slate-950 rounded-full overflow-hidden border border-white/15">
                 <div
-                  className="h-full bg-gradient-to-l from-rose-500 to-orange-400 transition-all duration-200 ml-auto"
+                  className="h-full bg-gradient-to-l from-rose-500 to-orange-400 progress-sheen transition-all duration-200 ml-auto"
                   style={{ width: `${rivalPct}%` }}
                 />
               </div>
-              <div className="text-[10px] text-slate-400 text-right truncate">
+              <div className="text-[10px] text-slate-400 text-right truncate tabular-nums">
                 {rival.title} · Награда {rival.rewardCoins} 🪙
               </div>
             </div>
           </div>
         </div>
 
-        {/* Dynamic Battle Cue Strip */}
-        <div className="flex justify-center">
+        {/* Dynamic Battle Cue Strip & Combo Status */}
+        <div className="flex flex-col items-center gap-1.5">
           <div
             className={`px-4 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
               rivalCharging
-                ? 'bg-rose-950/95 border-rose-400/60 text-rose-100 shadow-[0_0_24px_rgba(244,63,94,0.35)]'
+                ? 'bg-rose-950/95 border-rose-400/75 text-rose-100 shadow-[0_0_24px_rgba(244,63,94,0.45)]'
                 : isGuarding
                 ? 'bg-cyan-950/95 border-cyan-400/60 text-cyan-100'
                 : 'bg-[#0b1120]/90 border-white/10 text-slate-200'
@@ -812,7 +973,40 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
           >
             {statusBanner}
           </div>
+
+          {comboCount > 0 && phase === 'fighting' && (
+            <div className="px-3 py-1 rounded-lg bg-amber-950/90 border border-amber-400/45 text-[11px] font-mono font-bold text-amber-200 tabular-nums shadow-[0_4px_16px_rgba(245,158,11,0.2)]">
+              КОМБО x{comboCount} · +{comboCount * 15}% урон Тарана
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* FLOATING ARENA DAMAGE & PARRY CALLOUTS */}
+      <div className="fixed inset-0 pointer-events-none z-30 overflow-hidden">
+        {floatingCallouts.map((c) => {
+          const toneCls =
+            c.tone === 'gold'
+              ? 'text-amber-300 text-xl sm:text-2xl drop-shadow-[0_2px_10px_rgba(250,204,21,0.75)]'
+              : c.tone === 'parry'
+              ? 'text-sky-300 text-lg sm:text-xl drop-shadow-[0_2px_10px_rgba(56,189,248,0.8)]'
+              : c.tone === 'orange'
+              ? 'text-orange-300 text-lg sm:text-xl drop-shadow-[0_2px_8px_rgba(249,115,22,0.7)]'
+              : c.tone === 'rose'
+              ? 'text-rose-400 text-lg sm:text-xl drop-shadow-[0_2px_8px_rgba(244,63,94,0.75)]'
+              : 'text-cyan-300 text-base sm:text-lg drop-shadow-[0_2px_8px_rgba(34,211,238,0.65)]';
+
+          return (
+            <div
+              key={c.id}
+              className={`animate-float-damage absolute top-[43%] font-display font-extrabold tracking-tight tabular-nums whitespace-nowrap ${toneCls} ${
+                c.side === 'player' ? 'left-[31%]' : 'left-[69%]'
+              }`}
+            >
+              {c.text}
+            </div>
+          );
+        })}
       </div>
 
       {/* CENTER MATCH RESULT MODAL */}
@@ -893,33 +1087,47 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
       )}
 
       {/* BOTTOM PVP COMBAT CONTROLS */}
-      <div className="w-full max-w-2xl mx-auto pointer-events-auto">
+      <div className="w-full max-w-3xl mx-auto pointer-events-auto">
         <div className="glass-panel p-2 sm:p-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             type="button"
             disabled={matchResult !== 'none' || actionLock}
             onClick={() => handlePlayerAttack('light')}
-            className="ui-btn flex-col py-2.5 px-3 bg-slate-900/90 hover:bg-slate-800 border-cyan-500/40 text-white"
+            className="ui-btn relative flex-col py-2.5 px-3 bg-slate-900/90 hover:bg-slate-800 border-cyan-500/40 text-white"
           >
+            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/90 border border-white/15 font-mono text-[10px] text-slate-400 leading-none">
+              Q
+            </span>
             <div className="flex items-center gap-1.5 text-cyan-300 text-xs sm:text-sm font-bold">
               <Zap className="w-4 h-4" />
-              <span>Удар плавником</span>
+              <span>Выпад</span>
             </div>
-            <span className="text-[11px] font-normal text-slate-400">+24% ярости</span>
+            <span className="text-[11px] font-normal text-slate-400">+Комбо · +22% ярости</span>
           </button>
 
           <button
             type="button"
             disabled={matchResult !== 'none' || actionLock || heavyCd > 0}
             onClick={() => handlePlayerAttack('heavy')}
-            className="ui-btn flex-col py-2.5 px-3 bg-slate-900/90 hover:bg-slate-800 border-orange-500/45 text-white"
+            className={`ui-btn relative flex-col py-2.5 px-3 text-white ${
+              comboCount >= 2 && heavyCd <= 0
+                ? 'bg-gradient-to-b from-orange-950/95 to-slate-900 border-amber-400/75 shadow-[0_0_18px_rgba(245,158,11,0.3)]'
+                : 'bg-slate-900/90 hover:bg-slate-800 border-orange-500/45'
+            }`}
           >
+            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/90 border border-white/15 font-mono text-[10px] text-slate-400 leading-none">
+              W
+            </span>
             <div className="flex items-center gap-1.5 text-orange-300 text-xs sm:text-sm font-bold">
               <Swords className="w-4 h-4" />
               <span>Таран</span>
             </div>
-            <span className="text-[11px] font-mono font-normal text-slate-400">
-              {heavyCd > 0 ? `${heavyCd}с` : 'Сильный выпад'}
+            <span className="text-[11px] font-mono font-normal text-slate-400 tabular-nums">
+              {heavyCd > 0
+                ? `${heavyCd}с`
+                : comboCount > 0
+                ? `Финишер +${comboCount * 15}%`
+                : 'Сильный выпад'}
             </span>
           </button>
 
@@ -927,17 +1135,32 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
             type="button"
             disabled={matchResult !== 'none' || guardCd > 0 || isGuarding}
             onClick={handleGuard}
-            className={`ui-btn flex-col py-2.5 px-3 border ${
+            className={`ui-btn relative flex-col py-2.5 px-3 border ${
               isGuarding
-                ? 'bg-cyan-500/25 border-cyan-300 text-white'
+                ? 'bg-cyan-500/25 border-cyan-300 text-white shadow-[0_0_20px_rgba(34,211,238,0.35)]'
+                : rivalCharging && guardCd <= 0
+                ? 'bg-gradient-to-b from-amber-500/25 via-sky-500/20 to-slate-900 border-amber-300 text-white shadow-[0_0_24px_rgba(251,191,36,0.45)]'
                 : 'bg-slate-900/90 hover:bg-slate-800 border-sky-400/45 text-white'
             }`}
           >
-            <div className="flex items-center gap-1.5 text-sky-300 text-xs sm:text-sm font-bold">
+            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/90 border border-white/15 font-mono text-[10px] text-slate-400 leading-none">
+              Space
+            </span>
+            <div
+              className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold ${
+                rivalCharging && guardCd <= 0 && !isGuarding ? 'text-amber-300' : 'text-sky-300'
+              }`}
+            >
               <Shield className="w-4 h-4" />
-              <span>{isGuarding ? 'Щит активен' : 'Щит / Блок'}</span>
+              <span>
+                {isGuarding
+                  ? 'Щит активен'
+                  : rivalCharging && guardCd <= 0
+                  ? 'ПАРИРУЙ!'
+                  : 'Щит / Блок'}
+              </span>
             </div>
-            <span className="text-[11px] font-mono font-normal text-slate-400">
+            <span className="text-[11px] font-mono font-normal text-slate-400 tabular-nums">
               {guardCd > 0 ? `${guardCd}с` : 'Контратака'}
             </span>
           </button>
@@ -946,17 +1169,20 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
             type="button"
             disabled={matchResult !== 'none' || actionLock || playerRage < 100}
             onClick={() => handlePlayerAttack('ultimate')}
-            className={`ui-btn flex-col py-2.5 px-3 border ${
+            className={`ui-btn relative flex-col py-2.5 px-3 border ${
               playerRage >= 100
                 ? 'bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 border-amber-200/60 text-white shadow-[0_0_24px_rgba(244,63,94,0.45)]'
                 : 'bg-slate-900/75 border-white/10 text-slate-400'
             }`}
           >
+            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/90 border border-white/15 font-mono text-[10px] text-slate-400 leading-none">
+              R
+            </span>
             <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold">
               <Flame className="w-4 h-4" />
               <span>Вихрь Катаны</span>
             </div>
-            <span className="text-[11px] font-mono font-normal">
+            <span className="text-[11px] font-mono font-normal tabular-nums">
               {playerRage >= 100 ? 'Готово!' : `${playerRage}/100%`}
             </span>
           </button>

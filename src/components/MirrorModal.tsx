@@ -95,7 +95,7 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
           Удерживайте кнопку, чтобы рыбка раскрыла плавники и жабры
         </p>
 
-        <div className="rounded-xl border border-white/10 bg-slate-900/80 p-3 mb-3.5">
+        <div className="rounded-xl border border-white/10 bg-slate-950/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] p-3.5 mb-3.5">
           <div className="flex items-center justify-between text-xs font-medium text-slate-200 mb-2">
             <span className="truncate">
               {isCompleted
@@ -104,11 +104,11 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
                 ? 'Петушок в боевой стойке'
                 : 'Готов к тренировке'}
             </span>
-            <span className="font-mono text-violet-300 ml-2 tabular-nums">{flareProgress}%</span>
+            <span className="font-mono text-violet-300 ml-2 tabular-nums font-bold">{flareProgress}%</span>
           </div>
-          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div className="w-full h-2.5 bg-slate-900 border border-white/10 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-400 transition-all duration-100 rounded-full"
+              className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-400 progress-sheen transition-all duration-100 rounded-full"
               style={{ width: `${flareProgress}%` }}
             />
           </div>

@@ -4,9 +4,10 @@
  */
 
 import React, { useState } from 'react';
-import { X, Check, ShoppingBag } from 'lucide-react';
-import { FISH_SKINS, AQUARIUM_THEMES } from '../services/storage';
-import { FishStats, FishColorPalette, AquariumThemeId } from '../types';
+import { X, Check, ShoppingBag, Copy, Crown, CreditCard } from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { FISH_SKINS, AQUARIUM_THEMES, DONATION_TIERS } from '../services/storage';
+import { FishStats, FishColorPalette, AquariumThemeId, DonationTier } from '../types';
 import { retroAudio } from '../services/retroAudio';
 
 interface ShopModalProps {
@@ -16,6 +17,7 @@ interface ShopModalProps {
   onEquipSkin: (skinId: FishColorPalette) => void;
   onBuyTheme: (themeId: AquariumThemeId, priceCoins: number, pricePearls: number) => void;
   onEquipTheme: (themeId: AquariumThemeId) => void;
+  onApplyDonation: (tier: DonationTier) => void;
 }
 
 const THEME_BADGE_ICON: Record<AquariumThemeId, string> = {
@@ -33,11 +35,34 @@ export const ShopModal: React.FC<ShopModalProps> = ({
   onEquipSkin,
   onBuyTheme,
   onEquipTheme,
+  onApplyDonation,
 }) => {
-  const [activeTab, setActiveTab] = useState<'skins' | 'themes'>('skins');
+  const [activeTab, setActiveTab] = useState<'skins' | 'themes' | 'donate'>('skins');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [customAmount, setCustomAmount] = useState<string>('300');
 
   const skinsList = Object.values(FISH_SKINS);
   const themesList = Object.values(AQUARIUM_THEMES);
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    retroAudio.playBlip(900, 0.05);
+    setTimeout(() => setCopiedKey(null), 2500);
+  };
+
+  const triggerDonation = (tier: DonationTier) => {
+    retroAudio.playFanfare();
+    try {
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#ffd700', '#f59e0b', '#ec4899', '#38bdf8'],
+      });
+    } catch {}
+    onApplyDonation(tier);
+  };
 
   const formatPriceLabel = (priceCoins: number, pricePearls: number): string => {
     if (priceCoins > 0 && pricePearls > 0) return `${priceCoins} 🪙 + ${pricePearls} 🦪`;
@@ -60,7 +85,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                 Магазин аквариума
               </h2>
               <p className="text-xs text-slate-400">
-                Окрасы бойцового петушка и 3D-диорамы
+                Окрасы, 3D-диорамы и донат-наборы за реальные деньги
               </p>
             </div>
           </div>
@@ -86,23 +111,23 @@ export const ShopModal: React.FC<ShopModalProps> = ({
           </div>
         </div>
 
-        {/* Modern Segmented Tabs */}
+        {/* Modern Segmented 3-Tab Switcher */}
         <div className="px-4 pt-3 sm:px-6">
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-900/90 border border-white/10 rounded-xl">
+          <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-900/90 border border-white/10 rounded-xl">
             <button
               type="button"
               onClick={() => {
                 setActiveTab('skins');
                 retroAudio.playBlip(550, 0.03);
               }}
-              className={`py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-2 ${
+              className={`py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
                 activeTab === 'skins'
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
               <span>Окрасы</span>
-              <span className="text-xs opacity-70 tabular-nums">{skinsList.length}</span>
+              <span className="text-[11px] opacity-70 tabular-nums hidden sm:inline">{skinsList.length}</span>
             </button>
 
             <button
@@ -111,14 +136,30 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                 setActiveTab('themes');
                 retroAudio.playBlip(550, 0.03);
               }}
-              className={`py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-2 ${
+              className={`py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
                 activeTab === 'themes'
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
               <span>Аквариумы</span>
-              <span className="text-xs opacity-70 tabular-nums">{themesList.length}</span>
+              <span className="text-[11px] opacity-70 tabular-nums hidden sm:inline">{themesList.length}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('donate');
+                retroAudio.playBlip(640, 0.04);
+              }}
+              className={`py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'donate'
+                  ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 shadow-sm font-bold'
+                  : 'text-amber-300 hover:text-amber-200'
+              }`}
+            >
+              <Crown className="w-3.5 h-3.5 shrink-0" />
+              <span>Донат ₽</span>
             </button>
           </div>
         </div>
@@ -136,17 +177,18 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                 return (
                   <div
                     key={skin.id}
-                    className={`rounded-2xl border flex flex-col justify-between overflow-hidden transition ${
+                    className={`rounded-2xl border flex flex-col justify-between overflow-hidden transition shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${
                       isEquipped
-                        ? 'bg-slate-900/95 border-cyan-400/60 shadow-[0_0_25px_rgba(34,211,238,0.12)]'
-                        : 'bg-slate-900/65 border-white/10 hover:border-white/20'
+                        ? 'bg-slate-900/95 border-cyan-400/65 shadow-[0_0_28px_rgba(34,211,238,0.16),inset_0_1px_0_rgba(165,243,252,0.2)]'
+                        : 'bg-slate-900/70 border-white/10 hover:border-white/25'
                     }`}
                   >
                     {/* Live Palette Betta Preview */}
                     <div
-                      className="h-28 relative flex items-center justify-center px-4 border-b border-white/10"
+                      className="h-28 relative flex items-center justify-center px-4 border-b border-white/10 overflow-hidden"
                       style={{
-                        background: `radial-gradient(circle at 38% 50%, ${skin.primaryColor}30 0%, #070b15 78%)`,
+                        backgroundImage: `radial-gradient(circle at 42% 50%, ${skin.primaryColor}38 0%, #070b15 78%), linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px)`,
+                        backgroundSize: '100% 100%, 24px 24px, 24px 24px',
                       }}
                     >
                       <div className="absolute top-2.5 left-3 right-3 flex items-center justify-between text-[11px] font-medium">
@@ -261,10 +303,10 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                 return (
                   <div
                     key={thm.id}
-                    className={`rounded-2xl border flex flex-col justify-between overflow-hidden transition ${
+                    className={`rounded-2xl border flex flex-col justify-between overflow-hidden transition shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${
                       isEquipped
-                        ? 'bg-slate-900/95 border-cyan-400/60 shadow-[0_0_25px_rgba(34,211,238,0.12)]'
-                        : 'bg-slate-900/65 border-white/10 hover:border-white/20'
+                        ? 'bg-slate-900/95 border-cyan-400/65 shadow-[0_0_28px_rgba(34,211,238,0.16),inset_0_1px_0_rgba(165,243,252,0.2)]'
+                        : 'bg-slate-900/70 border-white/10 hover:border-white/25'
                     }`}
                   >
                     {/* Aquarium Panorama Preview */}
@@ -274,18 +316,24 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                         background: `linear-gradient(180deg, ${thm.waterColor} 0%, ${thm.fogColor} 72%, ${thm.sandColor} 100%)`,
                       }}
                     >
-                      <div className="flex items-center justify-between text-[11px] font-medium">
-                        <span className="text-amber-300 font-semibold">
+                      <div
+                        className="absolute inset-x-0 top-0 h-14 pointer-events-none opacity-35"
+                        style={{
+                          background: 'radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.4) 0%, transparent 75%)',
+                        }}
+                      />
+                      <div className="relative z-10 flex items-center justify-between text-[11px] font-medium">
+                        <span className="text-amber-300 font-semibold drop-shadow">
                           {thm.isVipOnly ? 'VIP-диорама' : ''}
                         </span>
-                        <span className={isEquipped ? 'text-cyan-300 font-semibold' : 'text-slate-300'}>
+                        <span className={isEquipped ? 'text-cyan-200 font-semibold drop-shadow' : 'text-slate-200/85 drop-shadow'}>
                           {isEquipped ? 'Активна' : isUnlocked ? 'В коллекции' : ''}
                         </span>
                       </div>
 
-                      <div className="flex items-end justify-between">
-                        <span className="text-3xl drop-shadow-[0_3px_8px_rgba(0,0,0,0.8)]">{icon}</span>
-                        <span className="text-[11px] font-medium text-white/80">
+                      <div className="relative z-10 flex items-end justify-between">
+                        <span className="text-3xl drop-shadow-[0_4px_10px_rgba(0,0,0,0.85)]">{icon}</span>
+                        <span className="text-[11px] font-medium text-white/85 drop-shadow">
                           3D-сцена
                         </span>
                       </div>
@@ -342,6 +390,155 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {activeTab === 'donate' && (
+            <div className="space-y-5">
+              {/* Real-money Packs */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {DONATION_TIERS.map((tier) => (
+                  <div
+                    key={tier.id}
+                    className={`p-4 rounded-2xl border flex flex-col justify-between transition shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${
+                      tier.isPopular
+                        ? 'bg-gradient-to-b from-amber-950/35 via-slate-900/95 to-slate-950 border-amber-400/65 shadow-[0_0_28px_rgba(251,191,36,0.16)]'
+                        : 'bg-slate-900/70 border-white/10 hover:border-white/25'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-semibold text-amber-300">
+                          {tier.titleBadge}
+                        </span>
+                        {tier.isPopular && (
+                          <span className="text-[11px] font-bold text-amber-200">
+                            Хит
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="font-display text-2xl font-extrabold text-white mb-1.5 tabular-nums">
+                        {tier.priceRub} ₽{' '}
+                        <span className="text-xs text-slate-400 font-normal font-mono">
+                          (${tier.priceUsd})
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 mb-3 leading-relaxed">
+                        {tier.description}
+                      </p>
+
+                      <ul className="space-y-1.5 border-t border-white/10 pt-3 mb-4">
+                        {tier.benefits.map((b, i) => (
+                          <li key={i} className="text-xs text-slate-200 flex items-start gap-2">
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => triggerDonation(tier)}
+                      className="ui-btn w-full py-2.5 px-4 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 border-amber-200/50 text-slate-950 font-bold text-xs"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      <span>Поддержать · {tier.priceRub} ₽</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Direct Payment Details & Custom Support */}
+              <div className="pt-3 border-t border-white/10 space-y-2.5">
+                <div className="text-xs font-semibold text-slate-200">
+                  Прямые реквизиты и произвольный донат
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="p-3 bg-slate-900/75 border border-white/10 rounded-xl flex items-center justify-between gap-2.5">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-white">Карта / СБП (РФ)</div>
+                      <div className="text-xs font-mono text-amber-300 mt-0.5 truncate">
+                        +7 (999) 000-00-00
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard('+79990000000', 'sbp')}
+                      className="ui-btn px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs shrink-0"
+                    >
+                      {copiedKey === 'sbp' ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                      <span>{copiedKey === 'sbp' ? 'Скопировано' : 'Копия'}</span>
+                    </button>
+                  </div>
+
+                  <div className="p-3 bg-slate-900/75 border border-white/10 rounded-xl flex items-center justify-between gap-2.5">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-white">USDT (TRC-20) / TON</div>
+                      <div className="text-xs font-mono text-emerald-300 mt-0.5 truncate">
+                        TYh6zK2b7bV4m9KqP1sD7uVw8zY3rX8nLq
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard('TYh6zK2b7bV4m9KqP1sD7uVw8zY3rX8nLq', 'crypto')}
+                      className="ui-btn px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs shrink-0"
+                    >
+                      {copiedKey === 'crypto' ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                      <span>{copiedKey === 'crypto' ? 'Скопировано' : 'Копия'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-900/65 border border-white/10 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="text-xs text-slate-300">
+                    Произвольная сумма поддержки (начисляются монеты и жемчуг):
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <input
+                      type="number"
+                      min={10}
+                      value={customAmount}
+                      onChange={(e) => setCustomAmount(e.target.value)}
+                      className="w-24 bg-slate-950 border border-white/15 rounded-xl px-2.5 py-1.5 text-xs font-mono tabular-nums text-amber-300 text-center outline-none focus:border-cyan-400"
+                      placeholder="300"
+                    />
+                    <span className="text-xs font-mono text-slate-400">₽</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const amount = Math.max(10, parseInt(customAmount, 10) || 100);
+                        triggerDonation({
+                          id: 'custom',
+                          name: `Донат ${amount}₽`,
+                          jpName: 'カスタム寄付',
+                          priceRub: amount,
+                          priceUsd: Number((amount / 80).toFixed(2)),
+                          pearlsAwarded: Math.round(amount * 0.7),
+                          coinsAwarded: amount * 12,
+                          titleBadge: 'Спонсор',
+                          description: `Поддержка проекта на ${amount} ₽`,
+                          benefits: [`+${Math.round(amount * 0.7)} жемчужин`, `+${amount * 12} монет`],
+                        });
+                      }}
+                      className="ui-btn px-3.5 py-2 bg-amber-400 hover:bg-amber-300 border-amber-200/40 text-slate-950 font-bold text-xs whitespace-nowrap"
+                    >
+                      Поддержать
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

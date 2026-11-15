@@ -221,6 +221,8 @@ export class BettaFish {
   private combatDashOffset: THREE.Vector3 = new THREE.Vector3();
   private combatRecoil: number = 0;
   private combatSpin: number = 0;
+  private hitFlashTimer: number = 0;
+  private combatWindupActive: boolean = false;
   private shieldMesh!: THREE.Mesh;
   private shieldMaterial!: THREE.MeshBasicMaterial;
   private combatGuardActive: boolean = false;
@@ -243,6 +245,7 @@ export class BettaFish {
     this.updateSkin(skinId);
 
     this.fishRoot.scale.setScalar(0.62);
+    this.group.rotation.order = 'YZX';
     this.group.add(this.fishRoot);
     this.fishRoot.add(this.vipCrownGroup);
     this.vipCrownGroup.visible = false;
@@ -1574,10 +1577,10 @@ export class BettaFish {
         ? 3.1
         : 5.2
       : this.isFlaring
-      ? 4.4
+      ? 4.0
       : this.isExcited
-      ? 2.8 + motionFactor * 1.15
-      : 1.45 + motionFactor * 1.4;
+      ? 1.75 + motionFactor * 1.15
+      : 1.4 + motionFactor * 1.3;
     this.animTime += delta * speedMult;
 
     if (this.combatMode) {
@@ -1601,38 +1604,63 @@ export class BettaFish {
 
       this.combatRecoil = THREE.MathUtils.damp(this.combatRecoil, 0, 6.0, delta);
       if (this.combatSpin > 0.01) {
-        this.combatSpin = THREE.MathUtils.damp(this.combatSpin, 0, 6.8, delta);
+        this.combatSpin = THREE.MathUtils.damp(this.combatSpin, 0, 5.4, delta);
       } else {
         this.combatSpin = 0;
       }
 
+      if (this.hitFlashTimer > 0) {
+        this.hitFlashTimer = Math.max(0, this.hitFlashTimer - delta);
+        const flash = this.hitFlashTimer / 0.28;
+        this.bodyMaterial.emissive.setRGB(flash * 0.95, flash * 0.22, flash * 0.28);
+        this.caudalMaterial.emissive.setRGB(flash * 0.9, flash * 0.25, flash * 0.3);
+        this.sailMaterial.emissive.setRGB(flash * 0.9, flash * 0.25, flash * 0.3);
+      } else if (this.combatWindupActive) {
+        const pulse = 0.25 + Math.sin(this.animTime * 3.5) * 0.14;
+        this.bodyMaterial.emissive.setRGB(pulse * 0.9, pulse * 0.15, pulse * 0.1);
+        this.caudalMaterial.emissive.setRGB(pulse * 0.85, pulse * 0.2, pulse * 0.08);
+        this.sailMaterial.emissive.setRGB(pulse * 0.85, pulse * 0.2, pulse * 0.08);
+      } else {
+        this.bodyMaterial.emissive.setRGB(0, 0, 0);
+        this.caudalMaterial.emissive.setRGB(0, 0, 0);
+        this.sailMaterial.emissive.setRGB(0, 0, 0);
+      }
+
       const headingDelta = shortestAngleDiff(this.headingAngle, this.combatFacing);
-      this.headingAngle += headingDelta * (1 - Math.exp(-8.0 * delta));
+      this.headingAngle += headingDelta * (1 - Math.exp(-8.5 * delta));
       this.pitchAngle = THREE.MathUtils.damp(
         this.pitchAngle,
-        this.combatRecoil * 0.35 + this.combatDashOffset.y * 0.3,
-        8.0,
+        this.combatRecoil * 0.42 + this.combatDashOffset.y * 0.35 + (this.combatWindupActive ? 0.18 : 0),
+        8.5,
         delta
       );
       this.rollAngle = THREE.MathUtils.damp(
         this.rollAngle,
-        this.combatRecoil * 0.55 * Math.sin(this.animTime * 4) + this.combatSpin,
-        8.0,
+        this.combatRecoil * 0.65 * Math.sin(this.animTime * 4.5) + this.combatSpin,
+        8.5,
         delta
       );
 
       this.group.position.copy(this.currentPosition);
-      this.group.rotation.set(this.rollAngle, this.headingAngle, this.pitchAngle, 'ZYX');
+      this.group.rotation.set(this.rollAngle, this.headingAngle, this.pitchAngle, 'YZX');
 
       if (this.shieldMesh) {
         this.shieldMesh.visible = this.combatGuardActive;
         if (this.combatGuardActive) {
-          const pulse = 1.0 + Math.sin(this.animTime * 2.5) * 0.05;
+          const pulse = 1.0 + Math.sin(this.animTime * 3.2) * 0.06;
           this.shieldMesh.scale.setScalar(pulse);
-          this.shieldMesh.rotation.y += delta * 1.8;
+          this.shieldMesh.rotation.y += delta * 2.4;
+          this.shieldMesh.rotation.z += delta * 1.1;
+          this.shieldMaterial.opacity = 0.26 + Math.sin(this.animTime * 4) * 0.06;
         }
       }
     } else {
+      if (this.hitFlashTimer > 0) {
+        this.hitFlashTimer = 0;
+        this.bodyMaterial.emissive.setRGB(0, 0, 0);
+        this.caudalMaterial.emissive.setRGB(0, 0, 0);
+        this.sailMaterial.emissive.setRGB(0, 0, 0);
+      }
       if (this.shieldMesh) this.shieldMesh.visible = false;
 
       // 1. Lifelike Betta Swimming: Burst-Cruise + Poised Mid-Water Hover Cycles
@@ -1695,7 +1723,7 @@ export class BettaFish {
           2.6,
           delta
         );
-        this.rollAngle = THREE.MathUtils.damp(this.rollAngle, 0, 3.2, delta);
+        this.rollAngle = THREE.MathUtils.damp(this.rollAngle, 0, 3.6, delta);
       } else {
         const targetSpeed = this.isSleeping
           ? 0.24
@@ -1704,34 +1732,39 @@ export class BettaFish {
           : this.isFlaring
           ? 0.44
           : this.isExcited
-          ? 1.85
+          ? 1.16
           : this.swimSpeed;
 
         if (dist > 0.01) {
           _toTarget.normalize();
           const arriveScale = this.isExcited
-            ? THREE.MathUtils.clamp(dist / 0.4, 0.38, 1.0)
+            ? THREE.MathUtils.clamp(dist / 0.55, 0.26, 1.0)
             : THREE.MathUtils.clamp(dist / 0.7, 0.2, 1.0);
           _desiredVel.copy(_toTarget).multiplyScalar(targetSpeed * arriveScale);
-          const steerRate = this.isExcited || this.returningHome ? 5.2 : 3.1;
+          const steerRate = this.returningHome ? 5.2 : this.isExcited ? 3.8 : 3.0;
           this.velocity.lerp(_desiredVel, 1 - Math.exp(-steerRate * delta));
         }
         this.currentPosition.addScaledVector(this.velocity, delta);
 
         const velLen = this.velocity.length();
+        const horizLen = Math.hypot(this.velocity.x, this.velocity.z);
         if (velLen > 0.025) {
-          const targetHeading = Math.atan2(-this.velocity.z, this.velocity.x);
-          const headingDelta = shortestAngleDiff(this.headingAngle, targetHeading);
-          const turnRate = this.isExcited ? 6.2 : 3.8;
-          this.headingAngle += headingDelta * (1 - Math.exp(-turnRate * delta));
+          let headingDelta = 0;
+          // Only turn heading when moving meaningfully horizontally so vertical bobbing never spins fish 180 deg
+          if (horizLen > 0.08) {
+            const targetHeading = Math.atan2(-this.velocity.z, this.velocity.x);
+            headingDelta = shortestAngleDiff(this.headingAngle, targetHeading);
+            const turnRate = this.isExcited ? 4.3 : 3.6;
+            this.headingAngle += headingDelta * (1 - Math.exp(-turnRate * delta));
+          }
 
           const targetPitch = Math.asin(
-            THREE.MathUtils.clamp(this.velocity.y / (velLen + 0.06), -0.68, 0.68)
+            THREE.MathUtils.clamp(this.velocity.y / (velLen + 0.14), -0.38, 0.38)
           );
-          this.pitchAngle = THREE.MathUtils.damp(this.pitchAngle, targetPitch, 4.0, delta);
+          this.pitchAngle = THREE.MathUtils.damp(this.pitchAngle, targetPitch, 4.2, delta);
 
-          const targetRoll = THREE.MathUtils.clamp(headingDelta * 0.42, -0.26, 0.26);
-          this.rollAngle = THREE.MathUtils.damp(this.rollAngle, targetRoll, 3.4, delta);
+          const targetRoll = THREE.MathUtils.clamp(-headingDelta * 0.24, -0.15, 0.15);
+          this.rollAngle = THREE.MathUtils.damp(this.rollAngle, targetRoll, 3.8, delta);
         }
       }
 
@@ -1742,7 +1775,7 @@ export class BettaFish {
       }
 
       this.group.position.copy(this.currentPosition);
-      this.group.rotation.set(this.rollAngle, this.headingAngle, this.pitchAngle, 'ZYX');
+      this.group.rotation.set(this.rollAngle, this.headingAngle, this.pitchAngle, 'YZX');
     }
 
     // 2. Gill Breathing & Mirror Flare Animation
@@ -1796,10 +1829,10 @@ export class BettaFish {
     const orig = this.bodyOriginalPositions;
     const count = pos.count;
     const amp = this.isFlaring
-      ? 0.095
+      ? 0.088
       : this.isExcited
-      ? 0.082
-      : THREE.MathUtils.lerp(0.032, 0.068, THREE.MathUtils.clamp((motionFactor - 0.28) / 1.2, 0, 1));
+      ? 0.056
+      : THREE.MathUtils.lerp(0.032, 0.064, THREE.MathUtils.clamp((motionFactor - 0.28) / 1.2, 0, 1));
 
     let peduncleZ = 0;
 
@@ -1862,10 +1895,10 @@ export class BettaFish {
 
   private animateSails(motionFactor = 1.0) {
     const spineAmp = this.isFlaring
-      ? 0.095
+      ? 0.088
       : this.isExcited
-      ? 0.082
-      : THREE.MathUtils.lerp(0.032, 0.068, THREE.MathUtils.clamp((motionFactor - 0.28) / 1.2, 0, 1));
+      ? 0.056
+      : THREE.MathUtils.lerp(0.032, 0.064, THREE.MathUtils.clamp((motionFactor - 0.28) / 1.2, 0, 1));
     const sailWaveScale = this.isFlaring ? 1.05 : THREE.MathUtils.clamp(0.7 + motionFactor * 0.35, 0.7, 1.2);
 
     // Dorsal sail (positioned at 0,0,0 so ox is exact body space X)
@@ -1938,14 +1971,19 @@ export class BettaFish {
     this.isHovering = false;
     this.hoverPauseTimer = 0;
     this.targetPosition.copy(point);
-    this.wanderTimer = isUrgent ? 3.5 : 4.2;
+    this.wanderTimer = isUrgent ? 2.6 : 4.2;
     if (isUrgent) {
       this.isExcited = true;
-      this.excitedTimer = 3.2;
+      this.excitedTimer = 1.6;
     } else {
       this.isExcited = false;
       this.excitedTimer = 0;
     }
+  }
+
+  public calmExcitement() {
+    this.isExcited = false;
+    this.excitedTimer = 0;
   }
 
   public triggerFlare(active: boolean) {
@@ -1961,6 +1999,8 @@ export class BettaFish {
   public enterCombat(homePos: THREE.Vector3, facing: number, previewOnly = false) {
     this.combatMode = true;
     this.combatPreview = previewOnly;
+    this.combatWindupActive = false;
+    this.hitFlashTimer = 0;
     this.returningHome = false;
     this.isHovering = false;
     this.isFlaring = true;
@@ -1979,6 +2019,15 @@ export class BettaFish {
   public exitCombat(aquariumReturnPos: THREE.Vector3) {
     this.combatMode = false;
     this.combatPreview = false;
+    this.combatWindupActive = false;
+    this.combatSpin = 0;
+    this.combatRecoil = 0;
+    this.rollAngle = 0;
+    this.pitchAngle = 0;
+    this.hitFlashTimer = 0;
+    this.bodyMaterial.emissive.setRGB(0, 0, 0);
+    this.caudalMaterial.emissive.setRGB(0, 0, 0);
+    this.sailMaterial.emissive.setRGB(0, 0, 0);
     this.isFlaring = false;
     this.combatGuardActive = false;
     this.mouthAnticipate = 0;
@@ -1992,19 +2041,43 @@ export class BettaFish {
     this.wanderTimer = 8.0;
   }
 
-  public triggerCombatStrike(dirX: number, power: 'light' | 'heavy' | 'ultimate') {
-    this.combatDashOffset.x = dirX * (power === 'ultimate' ? 2.1 : power === 'heavy' ? 1.55 : 1.15);
-    this.combatDashOffset.y = power === 'heavy' ? 0.14 : 0.04;
+  public triggerCombatWindup(dirX: number, active = true) {
+    this.combatWindupActive = active;
+    if (active) {
+      this.combatDashOffset.x = -dirX * 0.48;
+      this.combatDashOffset.y = 0.09;
+      this.combatDashOffset.z = 0.08;
+    }
+  }
+
+  public triggerCombatStrike(dirX: number, power: 'light' | 'heavy' | 'ultimate' | 'parry') {
+    this.combatWindupActive = false;
+    const reach =
+      power === 'ultimate'
+        ? 2.35
+        : power === 'heavy'
+        ? 2.02
+        : power === 'parry'
+        ? 1.88
+        : 1.38;
+    this.combatDashOffset.x = dirX * reach;
+    this.combatDashOffset.y = power === 'heavy' || power === 'ultimate' ? 0.18 : 0.06;
+    this.combatDashOffset.z = power === 'light' ? 0.12 : 0;
     this.triggerGulp();
     if (power === 'ultimate') {
+      this.combatSpin = Math.PI * 4;
+    } else if (power === 'heavy' || power === 'parry') {
       this.combatSpin = Math.PI * 2;
     }
   }
 
-  public triggerCombatHit(pushDirX: number) {
-    this.combatRecoil = 1.0;
-    this.combatDashOffset.x = pushDirX * 0.55;
-    this.combatDashOffset.y = 0.18;
+  public triggerCombatHit(pushDirX: number, isCrit = false) {
+    this.combatWindupActive = false;
+    this.combatRecoil = isCrit ? 1.45 : 1.0;
+    this.hitFlashTimer = isCrit ? 0.34 : 0.24;
+    this.combatDashOffset.x = pushDirX * (isCrit ? 0.85 : 0.58);
+    this.combatDashOffset.y = isCrit ? 0.28 : 0.18;
+    this.combatDashOffset.z = (Math.random() - 0.5) * 0.18;
   }
 
   public setCombatGuard(active: boolean) {

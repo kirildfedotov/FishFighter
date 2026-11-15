@@ -8,7 +8,6 @@ import { AquariumCanvas } from './components/AquariumCanvas';
 import { RetroHeader } from './components/RetroHeader';
 import { ActionDock } from './components/ActionDock';
 import { ShopModal } from './components/ShopModal';
-import { DonateModal } from './components/DonateModal';
 import { MirrorModal } from './components/MirrorModal';
 import { SplashScreen } from './components/SplashScreen';
 import { FighterOverlay, RIVAL_ROSTER } from './components/FighterOverlay';
@@ -52,7 +51,6 @@ export default function App() {
 
   // Modals
   const [showShop, setShowShop] = useState(false);
-  const [showDonate, setShowDonate] = useState(false);
   const [showMirror, setShowMirror] = useState(false);
 
   // Notification Toast
@@ -174,7 +172,6 @@ export default function App() {
   const enterFighterArena = () => {
     const rival = RIVAL_ROSTER[rivalIndex % RIVAL_ROSTER.length];
     setShowShop(false);
-    setShowDonate(false);
     setShowMirror(false);
     setFighterMode(true);
     retroAudio.playFlare();
@@ -239,12 +236,11 @@ export default function App() {
           exitFighterRef.current();
         }
         setShowShop(false);
-        setShowDonate(false);
         setShowMirror(false);
         return;
       }
 
-      if (showSplash || fighterMode || showShop || showDonate || showMirror) return;
+      if (showSplash || fighterMode || showShop || showMirror) return;
 
       switch (e.key.toLowerCase()) {
         case '1':
@@ -267,16 +263,12 @@ export default function App() {
         case 's':
           setShowShop(true);
           break;
-        case '6':
-        case 'd':
-          setShowDonate(true);
-          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSplash, fighterMode, showShop, showDonate, showMirror]);
+  }, [showSplash, fighterMode, showShop, showMirror]);
 
   const handleFishTapped = () => {
     setStats((prev) => ({
@@ -345,7 +337,7 @@ export default function App() {
       };
     });
 
-    setShowDonate(false);
+    setShowShop(false);
     showToast(`Активирован ${tier.titleBadge} — золотая корона надета!`);
   };
 
@@ -382,6 +374,9 @@ export default function App() {
           onFishTapped={handleFishTapped}
         />
 
+        {/* Subtle ambient edge vignette for atmospheric tank framing */}
+        <div className="absolute inset-0 viewport-vignette pointer-events-none z-10" />
+
         {/* Optional Subtle Screen Atmosphere Filter */}
         {crtEnabled && (
           <div className="absolute inset-0 crt-overlay crt-vignette pointer-events-none z-10" />
@@ -415,7 +410,6 @@ export default function App() {
               onOpenMirror={() => setShowMirror(true)}
               onEnterFighter={enterFighterArena}
               onOpenShop={() => setShowShop(true)}
-              onOpenDonate={() => setShowDonate(true)}
             />
           </>
         ) : (
@@ -447,13 +441,6 @@ export default function App() {
           onEquipSkin={handleEquipSkin}
           onBuyTheme={handleBuyTheme}
           onEquipTheme={handleEquipTheme}
-        />
-      )}
-
-      {showDonate && (
-        <DonateModal
-          stats={stats}
-          onClose={() => setShowDonate(false)}
           onApplyDonation={handleApplyDonation}
         />
       )}
