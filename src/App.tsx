@@ -51,6 +51,7 @@ export default function App() {
 
   // Modals
   const [showShop, setShowShop] = useState(false);
+  const [shopTab, setShopTab] = useState<'skins' | 'themes' | 'donate'>('skins');
   const [showMirror, setShowMirror] = useState(false);
 
   // Notification Toast
@@ -192,7 +193,6 @@ export default function App() {
   const handleFighterMatchEnd = (
     won: boolean,
     coins: number,
-    pearls: number,
     exp: number,
     rivalId: string,
     ratingDelta: number
@@ -206,7 +206,6 @@ export default function App() {
       return {
         ...prev,
         coins: prev.coins + coins,
-        pearls: prev.pearls + pearls,
         happiness: Math.min(100, prev.happiness + (won ? 15 : 5)),
         totalPlays: prev.totalPlays + 1,
         fighterWins: (prev.fighterWins ?? 0) + (won ? 1 : 0),
@@ -261,6 +260,7 @@ export default function App() {
           break;
         case '5':
         case 's':
+          setShopTab('skins');
           setShowShop(true);
           break;
       }
@@ -278,11 +278,10 @@ export default function App() {
     }));
   };
 
-  const handleBuySkin = (skinId: FishColorPalette, priceCoins: number, pricePearls: number) => {
+  const handleBuySkin = (skinId: FishColorPalette, priceCoins: number) => {
     setStats((prev) => ({
       ...prev,
       coins: prev.coins - priceCoins,
-      pearls: prev.pearls - pricePearls,
       unlockedSkins: [...prev.unlockedSkins, skinId],
       skin: skinId,
     }));
@@ -294,11 +293,10 @@ export default function App() {
     showToast(`Выбран окрас: ${FISH_SKINS[skinId]?.name}`);
   };
 
-  const handleBuyTheme = (themeId: AquariumThemeId, priceCoins: number, pricePearls: number) => {
+  const handleBuyTheme = (themeId: AquariumThemeId, priceCoins: number) => {
     setStats((prev) => ({
       ...prev,
       coins: prev.coins - priceCoins,
-      pearls: prev.pearls - pricePearls,
       unlockedThemes: [...prev.unlockedThemes, themeId],
       theme: themeId,
     }));
@@ -320,7 +318,6 @@ export default function App() {
         ...prev,
         isVip: true,
         coins: prev.coins + tier.coinsAwarded,
-        pearls: prev.pearls + tier.pearlsAwarded,
         unlockedSkins: isSuper
           ? allSkins
           : prev.unlockedSkins.includes('golden_imperial')
@@ -338,7 +335,7 @@ export default function App() {
     });
 
     setShowShop(false);
-    showToast(`Активирован ${tier.titleBadge} — золотая корона надета!`);
+    showToast(`Активирован ${tier.titleBadge} — +${tier.coinsAwarded} 🪙 и золотая корона!`);
   };
 
   const handleMirrorTrainingComplete = () => {
@@ -388,6 +385,10 @@ export default function App() {
             <RetroHeader
               stats={stats}
               onUpdateName={(name) => setStats((prev) => ({ ...prev, name }))}
+              onOpenDonate={() => {
+                setShopTab('donate');
+                setShowShop(true);
+              }}
               crtEnabled={crtEnabled}
               onToggleCrt={() => setCrtEnabled(!crtEnabled)}
               bgmActive={bgmActive}
@@ -409,7 +410,10 @@ export default function App() {
               onClean={handleClean}
               onOpenMirror={() => setShowMirror(true)}
               onEnterFighter={enterFighterArena}
-              onOpenShop={() => setShowShop(true)}
+              onOpenShop={() => {
+                setShopTab('skins');
+                setShowShop(true);
+              }}
             />
           </>
         ) : (
@@ -436,6 +440,7 @@ export default function App() {
       {showShop && (
         <ShopModal
           stats={stats}
+          initialTab={shopTab}
           onClose={() => setShowShop(false)}
           onBuySkin={handleBuySkin}
           onEquipSkin={handleEquipSkin}

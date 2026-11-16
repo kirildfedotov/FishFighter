@@ -80,7 +80,7 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
             retroAudio.playBlip(400, 0.04);
           }}
           aria-label="Закрыть тренировку"
-          className="ui-btn absolute top-3 right-3 bg-slate-800/80 hover:bg-slate-700 border-white/15 text-slate-200 p-1.5 rounded-xl"
+          className="ui-btn glass-btn absolute top-3 right-3 p-1.5 rounded-xl"
         >
           <X className="w-4 h-4" />
         </button>
@@ -121,7 +121,7 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
             onPointerUp={() => setIsHoldingMirror(false)}
             onPointerLeave={() => setIsHoldingMirror(false)}
             onPointerCancel={() => setIsHoldingMirror(false)}
-            className="ui-btn w-full py-3 px-5 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-400 hover:to-fuchsia-400 border-violet-300/40 text-white font-bold text-xs sm:text-sm touch-none"
+            className="ui-btn glass-btn-violet w-full py-3 px-5 font-bold text-xs sm:text-sm touch-none"
           >
             {isHoldingMirror ? 'Держим зеркало...' : 'Зажать зеркало'}
           </button>
@@ -133,7 +133,7 @@ export const MirrorModal: React.FC<MirrorModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="ui-btn w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 border-emerald-300/40 text-slate-950 font-bold text-xs"
+              className="ui-btn glass-btn-emerald w-full py-2.5 px-4 font-bold text-xs"
             >
               Готово
             </button>

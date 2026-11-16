@@ -22,7 +22,6 @@ export interface FishSkin {
   bellyColor: string;
   fresnelColor: string;
   priceCoins: number;
-  pricePearls: number;
   isVipOnly?: boolean;
 }
 
@@ -43,7 +42,6 @@ export interface AquariumTheme {
   sandColor: string;
   description: string;
   priceCoins: number;
-  pricePearls: number;
   isVipOnly?: boolean;
 }
 
@@ -75,7 +73,6 @@ export interface FishStats {
   skin: FishColorPalette;
   theme: AquariumThemeId;
   coins: number;
-  pearls: number;
   isVip: boolean;
   unlockedSkins: FishColorPalette[];
   unlockedThemes: AquariumThemeId[];
@@ -101,7 +98,6 @@ export interface DonationTier {
   jpName: string;
   priceRub: number;
   priceUsd: number;
-  pearlsAwarded: number;
   coinsAwarded: number;
   titleBadge: string;
   description: string;

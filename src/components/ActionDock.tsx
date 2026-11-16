@@ -45,10 +45,10 @@ export const ActionDock: React.FC<ActionDockProps> = ({
       hint: 'Выбор корма',
       icon: Utensils,
       buttonStyle: showFoodMenu
-        ? 'bg-sky-500/20 border-sky-400/60 text-white'
-        : 'bg-slate-900/90 hover:bg-slate-800/95 border-white/10 hover:border-sky-400/50 text-slate-100',
-      iconWrap: 'bg-sky-500/15 border-sky-400/25',
-      iconColor: 'text-sky-400',
+        ? 'glass-btn-sky'
+        : 'glass-btn hover:border-sky-300/55',
+      iconWrap: 'bg-sky-400/15 border-sky-300/30 backdrop-blur-sm',
+      iconColor: 'text-sky-300',
       onClick: () => {
         setShowFoodMenu((prev) => !prev);
         retroAudio.playBlip(600, 0.05);
@@ -60,9 +60,9 @@ export const ActionDock: React.FC<ActionDockProps> = ({
       hint: 'Свежая вода',
       icon: Droplets,
       buttonStyle:
-        'bg-slate-900/90 hover:bg-slate-800/95 border-white/10 hover:border-emerald-400/50 text-slate-100',
-      iconWrap: 'bg-emerald-500/15 border-emerald-400/25',
-      iconColor: 'text-emerald-400',
+        'glass-btn hover:border-emerald-300/55',
+      iconWrap: 'bg-emerald-400/15 border-emerald-300/30 backdrop-blur-sm',
+      iconColor: 'text-emerald-300',
       onClick: () => {
         onClean();
         setShowFoodMenu(false);
@@ -74,9 +74,9 @@ export const ActionDock: React.FC<ActionDockProps> = ({
       hint: 'Тренировка',
       icon: Eye,
       buttonStyle:
-        'bg-slate-900/90 hover:bg-slate-800/95 border-white/10 hover:border-violet-400/50 text-slate-100',
-      iconWrap: 'bg-violet-500/15 border-violet-400/25',
-      iconColor: 'text-violet-400',
+        'glass-btn hover:border-violet-300/55',
+      iconWrap: 'bg-violet-400/15 border-violet-300/30 backdrop-blur-sm',
+      iconColor: 'text-violet-300',
       onClick: () => {
         onOpenMirror();
         setShowFoodMenu(false);
@@ -88,9 +88,9 @@ export const ActionDock: React.FC<ActionDockProps> = ({
       hint: 'Окрасы и ₽',
       icon: ShoppingBag,
       buttonStyle:
-        'bg-slate-900/90 hover:bg-slate-800/95 border-white/10 hover:border-amber-400/50 text-slate-100',
-      iconWrap: 'bg-amber-500/15 border-amber-400/25',
-      iconColor: 'text-amber-400',
+        'glass-btn hover:border-amber-300/55',
+      iconWrap: 'bg-amber-400/15 border-amber-300/30 backdrop-blur-sm',
+      iconColor: 'text-amber-300',
       onClick: () => {
         onOpenShop();
         setShowFoodMenu(false);
@@ -102,8 +102,8 @@ export const ActionDock: React.FC<ActionDockProps> = ({
       hint: 'Арена PvP',
       icon: Swords,
       buttonStyle:
-        'col-span-2 sm:col-span-1 bg-gradient-to-br from-rose-600 via-red-600 to-orange-500 hover:from-rose-500 hover:to-amber-500 border-amber-200/45 text-white shadow-[0_8px_26px_rgba(244,63,94,0.42)]',
-      iconWrap: 'bg-white/20 border-white/30',
+        'col-span-2 sm:col-span-1 glass-btn-rose',
+      iconWrap: 'bg-white/20 border-white/35 backdrop-blur-sm',
       iconColor: 'text-white',
       isFeatured: true,
       onClick: () => {
@@ -128,7 +128,7 @@ export const ActionDock: React.FC<ActionDockProps> = ({
             setShowFoodMenu(false);
             retroAudio.playBlip(500, 0.04);
           }}
-          className="bg-[#0d1428]/95 hover:bg-slate-800 border-t border-x border-white/15 text-slate-300 hover:text-white px-4 py-1 rounded-t-xl text-[11px] font-medium flex items-center gap-1.5 transition cursor-pointer shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+          className="bg-slate-900/45 backdrop-blur-md hover:bg-white/15 border-t border-x border-white/20 text-slate-200 hover:text-white px-4 py-1 rounded-t-xl text-[11px] font-medium flex items-center gap-1.5 transition cursor-pointer shadow-[inset_0_1px_0_rgba(255,255,255,0.22)]"
         >
           {isCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           <span>{isCollapsed ? 'Открыть панель' : 'Скрыть'}</span>
@@ -148,7 +148,7 @@ export const ActionDock: React.FC<ActionDockProps> = ({
                 type="button"
                 onClick={() => setShowFoodMenu(false)}
                 aria-label="Закрыть меню корма"
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
+                className="ui-btn glass-btn p-1 rounded-lg"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -168,12 +168,12 @@ export const ActionDock: React.FC<ActionDockProps> = ({
                     }}
                     className={`ui-btn w-full justify-between px-3 py-2.5 text-left ${
                       canAfford
-                        ? 'bg-slate-900/90 hover:bg-slate-800 border-white/10 hover:border-sky-400/50 text-white'
-                        : 'bg-slate-900/50 border-white/5 text-slate-500'
+                        ? 'glass-btn hover:border-sky-300/55'
+                        : 'glass-btn text-slate-400'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-8 h-8 rounded-lg bg-slate-800/90 border border-white/10 flex items-center justify-center text-lg shrink-0">
+                      <span className="w-8 h-8 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center text-lg shrink-0">
                         {food.icon}
                       </span>
                       <div className="min-w-0">
@@ -185,7 +185,7 @@ export const ActionDock: React.FC<ActionDockProps> = ({
                     </div>
                     <span
                       className={`text-xs font-mono font-bold shrink-0 tabular-nums ${
-                        food.priceCoins === 0 ? 'text-emerald-400' : 'text-amber-300'
+                        food.priceCoins === 0 ? 'text-emerald-300' : 'text-amber-300'
                       }`}
                     >
                       {food.priceCoins > 0 ? `${food.priceCoins} 🪙` : 'Бесплатно'}

@@ -119,6 +119,7 @@ export class AquariumScene {
   // Fighter PvP Arena Mode (sits to the right at X = 12 so camera glide slides aquarium left)
   private readonly arenaCenterX = 12.0;
   public fighterMode: boolean = false;
+  private fighterActive: boolean = false;
   private fighterBlend = 0;
   public opponentFish!: BettaFish;
   private arenaGroup: THREE.Group = new THREE.Group();
@@ -126,7 +127,12 @@ export class AquariumScene {
   private arenaCyanLight!: THREE.PointLight;
   private arenaCrimsonLight!: THREE.PointLight;
   private arenaBackRedLight!: THREE.PointLight;
+  private playerGroundRing!: THREE.Mesh;
+  private rivalGroundRing!: THREE.Mesh;
+  private arenaMatSurfaceY: number = -1.32;
   private arenaAspectZ: number = 5.5;
+  private arenaOverheadY: number = 4.65;
+  private arenaOverheadZ: number = 2.85;
   private combatVfxGroup: THREE.Group = new THREE.Group();
   private activeCombatVfx: CombatVfxItem[] = [];
   private arenaShakeIntensity = 0;
@@ -255,6 +261,7 @@ export class AquariumScene {
       this.keyLight.shadow.normalBias = 0.02;
     }
     this.scene.add(this.keyLight);
+    this.scene.add(this.keyLight.target);
 
     this.waterTopLight = new THREE.SpotLight(0x7dd3fc, 2.2, 12, Math.PI / 2.6, 0.5, 1.3);
     this.waterTopLight.position.set(0, 3.6, 0.8);
@@ -282,6 +289,8 @@ export class AquariumScene {
     const targetZ = aspect < 0.85 ? 6.6 : aspect < 1.1 ? 5.8 : 5.2;
     this.currentCameraPos.z = targetZ;
     this.arenaAspectZ = aspect < 0.85 ? 7.2 : aspect < 1.1 ? 6.15 : 5.55;
+    this.arenaOverheadY = aspect < 0.85 ? 6.35 : aspect < 1.1 ? 5.45 : 4.65;
+    this.arenaOverheadZ = aspect < 0.85 ? 3.75 : aspect < 1.1 ? 3.25 : 2.85;
   }
 
   private initFish(skinId: FishColorPalette) {
@@ -1041,12 +1050,12 @@ export class AquariumScene {
     this.arenaGroup.position.set(this.arenaCenterX, 0, 0);
     this.scene.add(this.arenaGroup);
     const baseY = this.tankBounds.minY;
-    const tankH = 4.1;
-    const halfW = 3.35;
-    const halfD = 1.85;
+    const tankH = 4.0;
+    const halfW = 3.55;
+    const backZ = -2.65;
 
     const basaltMat = new THREE.MeshStandardMaterial({ color: 0x16090e, roughness: 0.65, metalness: 0.35 });
-    const slateMat = new THREE.MeshStandardMaterial({ color: 0x291119, roughness: 0.48, metalness: 0.42 });
+    const slateMat = new THREE.MeshStandardMaterial({ color: 0x240f17, roughness: 0.48, metalness: 0.42 });
     const tankFrameMat = new THREE.MeshStandardMaterial({ color: 0x13070b, roughness: 0.32, metalness: 0.82 });
     const goldTrimMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0x92400e, emissiveIntensity: 0.35, roughness: 0.25, metalness: 0.85 });
     const scarletNeonMat = new THREE.MeshStandardMaterial({ color: 0xfb7185, emissive: 0xe11d48, emissiveIntensity: 1.55, roughness: 0.2 });
@@ -1065,175 +1074,187 @@ export class AquariumScene {
     lintel.position.set(archX, baseY + 3.05, 0);
     this.arenaGroup.add(lintel);
 
-    // === ENCLOSED BATTLE ARENA AQUARIUM STRUCTURE ===
-    // 4 Corner Steel & Crimson LED Tank Columns
-    const cornerCoords = [
-      { x: -halfW, z: -halfD },
-      { x: halfW, z: -halfD },
-      { x: -halfW, z: halfD },
-      { x: halfW, z: halfD },
-    ];
-    cornerCoords.forEach((cc) => {
-      const col = new THREE.Mesh(new THREE.BoxGeometry(0.2, tankH, 0.2), tankFrameMat);
-      col.position.set(cc.x, baseY + tankH * 0.5, cc.z);
-      this.arenaGroup.add(col);
-
-      const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(0.06, tankH - 0.16, 0.06), scarletNeonMat);
-      ledStrip.position.set(
-        cc.x + (cc.x < 0 ? 0.09 : -0.09),
-        baseY + tankH * 0.5,
-        cc.z + (cc.z < 0 ? 0.09 : -0.09)
-      );
-      this.arenaGroup.add(ledStrip);
-    });
-
-    // Bottom Tank Plinth Frame & Glowing Crimson Perimeter Rails
-    const fbBeamGeom = new THREE.BoxGeometry(halfW * 2 + 0.24, 0.22, 0.22);
-    const lrBeamGeom = new THREE.BoxGeometry(0.22, 0.22, halfD * 2 + 0.24);
-    [-halfD, halfD].forEach((z) => {
-      const bBeam = new THREE.Mesh(fbBeamGeom, tankFrameMat);
-      bBeam.position.set(0, baseY + 0.11, z);
-      const tBeam = new THREE.Mesh(fbBeamGeom, tankFrameMat);
-      tBeam.position.set(0, baseY + tankH - 0.09, z);
-      const bGlow = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2 - 0.12, 0.05, 0.05), scarletNeonMat);
-      bGlow.position.set(0, baseY + 0.23, z + (z > 0 ? -0.08 : 0.08));
-      const tGlow = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2 - 0.12, 0.05, 0.05), scarletNeonMat);
-      tGlow.position.set(0, baseY + tankH - 0.21, z + (z > 0 ? -0.08 : 0.08));
-      this.arenaGroup.add(bBeam, tBeam, bGlow, tGlow);
-    });
-    [-halfW, halfW].forEach((x) => {
-      const bBeam = new THREE.Mesh(lrBeamGeom, tankFrameMat);
-      bBeam.position.set(x, baseY + 0.11, 0);
-      const tBeam = new THREE.Mesh(lrBeamGeom, tankFrameMat);
-      tBeam.position.set(x, baseY + tankH - 0.09, 0);
-      const bGlow = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, halfD * 2 - 0.12), scarletNeonMat);
-      bGlow.position.set(x + (x > 0 ? -0.08 : 0.08), baseY + 0.23, 0);
-      const tGlow = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, halfD * 2 - 0.12), scarletNeonMat);
-      tGlow.position.set(x + (x > 0 ? -0.08 : 0.08), baseY + tankH - 0.21, 0);
-      this.arenaGroup.add(bBeam, tBeam, bGlow, tGlow);
-    });
-
-    // Translucent Tinted Aquarium Glass Walls (Left, Right & Back)
-    const sideGlassMat = new THREE.MeshStandardMaterial({
-      color: 0xf43f5e,
-      emissive: 0x4c0519,
-      emissiveIntensity: 0.35,
-      transparent: true,
-      opacity: 0.11,
-      roughness: 0.08,
+    // === OPEN-TOP BACKDROP & SIGNBOARD (Visible cleanly from Front Lobby without blocking Overhead 2.5D Cam) ===
+    const backWallMat = new THREE.MeshStandardMaterial({
+      color: 0x2b0510,
+      emissive: 0x1e030b,
+      emissiveIntensity: 0.6,
+      roughness: 0.35,
       metalness: 0.25,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    const sideWallGeom = new THREE.PlaneGeometry(halfD * 2 - 0.12, tankH - 0.28);
-    [-halfW + 0.04, halfW - 0.04].forEach((x) => {
-      const wall = new THREE.Mesh(sideWallGeom, sideGlassMat);
-      wall.rotation.y = Math.PI / 2;
-      wall.position.set(x, baseY + tankH * 0.5, 0);
-      this.arenaGroup.add(wall);
-    });
-
-    const backGlassMat = new THREE.MeshStandardMaterial({
-      color: 0x3b0714,
-      emissive: 0x26040d,
-      emissiveIntensity: 0.65,
       transparent: true,
-      opacity: 0.72,
-      roughness: 0.2,
-      metalness: 0.2,
-      depthWrite: false,
-      side: THREE.DoubleSide,
+      opacity: 0.88,
     });
-    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(halfW * 2 - 0.16, tankH - 0.28), backGlassMat);
-    backWall.position.set(0, baseY + tankH * 0.5, -halfD + 0.06);
+    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(halfW * 2, tankH), backWallMat);
+    backWall.position.set(0, baseY + tankH * 0.5, backZ);
     this.arenaGroup.add(backWall);
 
-    // Subtle Arena Back Wall Emblem Rings & Illuminated "FIGHTER ARENA" Signboard
-    const backEmblemOuter = new THREE.Mesh(new THREE.TorusGeometry(1.38, 0.032, 10, 48), deepCrimsonGlowMat);
-    backEmblemOuter.position.set(0, baseY + 1.95, -halfD + 0.14);
-    const backEmblemInner = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.024, 10, 6), goldTrimMat);
-    backEmblemInner.position.set(0, baseY + 1.95, -halfD + 0.15);
-    this.arenaGroup.add(backEmblemOuter, backEmblemInner);
-    this.arenaAnimatedNodes.push({ obj: backEmblemInner, baseY: baseY + 1.95, phase: 0.4 });
+    const backTopBeam = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2 + 0.2, 0.18, 0.18), tankFrameMat);
+    backTopBeam.position.set(0, baseY + tankH - 0.08, backZ + 0.04);
+    const backGlowRail = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2 - 0.1, 0.05, 0.05), scarletNeonMat);
+    backGlowRail.position.set(0, baseY + tankH - 0.2, backZ + 0.11);
+    this.arenaGroup.add(backTopBeam, backGlowRail);
 
-    const arenaSignTex = this.makeRetroSignTexture('FIGHTER ARENA', 'PVP BATTLE TANK', '#fb7185', '#1d050c');
+    // Arena Back Wall Emblem Rings & Illuminated "FIGHTER ARENA" Signboard
+    const backEmblemOuter = new THREE.Mesh(new THREE.TorusGeometry(1.28, 0.03, 10, 48), deepCrimsonGlowMat);
+    backEmblemOuter.position.set(0, baseY + 1.85, backZ + 0.09);
+    const backEmblemInner = new THREE.Mesh(new THREE.TorusGeometry(0.84, 0.024, 10, 8), goldTrimMat);
+    backEmblemInner.position.set(0, baseY + 1.85, backZ + 0.1);
+    this.arenaGroup.add(backEmblemOuter, backEmblemInner);
+    this.arenaAnimatedNodes.push({ obj: backEmblemInner, baseY: baseY + 1.85, phase: 0.4 });
+
+    const arenaSignTex = this.makeRetroSignTexture('FIGHTER ARENA', '2.5D OCTAGON RING', '#fb7185', '#1d050c');
     const arenaSignMat = new THREE.MeshBasicMaterial({ map: arenaSignTex });
-    const arenaSignBoard = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.68, 0.1), [
+    const arenaSignBoard = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.64, 0.1), [
       tankFrameMat, tankFrameMat, tankFrameMat, tankFrameMat, arenaSignMat, tankFrameMat,
     ]);
-    arenaSignBoard.position.set(0, baseY + tankH - 0.62, -halfD + 0.22);
-    const arenaSignGlowFrame = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.76, 0.06), scarletNeonMat);
-    arenaSignGlowFrame.position.set(0, baseY + tankH - 0.62, -halfD + 0.17);
+    arenaSignBoard.position.set(0, baseY + tankH - 0.62, backZ + 0.16);
+    const arenaSignGlowFrame = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.72, 0.06), scarletNeonMat);
+    arenaSignGlowFrame.position.set(0, baseY + tankH - 0.62, backZ + 0.11);
     this.arenaGroup.add(arenaSignBoard, arenaSignGlowFrame);
 
-    // Stepped Octagonal Battle Arena Floor Stage inside the Tank
-    const outerRing = new THREE.Mesh(new THREE.CylinderGeometry(2.95, 3.2, 0.22, 8), basaltMat);
-    outerRing.position.set(0, baseY + 0.12, 0);
-    outerRing.receiveShadow = true;
-    this.arenaGroup.add(outerRing);
+    // === 2.5D OCTAGON FIGHTER STAGE & CAGE ===
+    // Stepped Octagonal Pedestal + Padded Arena Canvas Mat
+    const outerOctagon = new THREE.Mesh(new THREE.CylinderGeometry(2.85, 3.12, 0.44, 8), basaltMat);
+    outerOctagon.rotation.y = Math.PI / 8;
+    outerOctagon.position.set(0, baseY + 0.22, 0);
+    outerOctagon.receiveShadow = true;
+    this.arenaGroup.add(outerOctagon);
 
-    const innerStage = new THREE.Mesh(new THREE.CylinderGeometry(2.45, 2.65, 0.16, 8), slateMat);
-    innerStage.position.set(0, baseY + 0.26, 0);
-    innerStage.receiveShadow = true;
-    this.arenaGroup.add(innerStage);
+    const innerMatStage = new THREE.Mesh(new THREE.CylinderGeometry(2.48, 2.66, 0.34, 8), slateMat);
+    innerMatStage.rotation.y = Math.PI / 8;
+    innerMatStage.position.set(0, baseY + 0.51, 0);
+    innerMatStage.receiveShadow = true;
+    this.arenaGroup.add(innerMatStage);
 
-    // Glowing Battle Zone Floor Rings (Crimson Arena Ring + Corner Accents + Gold Center Crest)
-    const arenaPerimeterRing = new THREE.Mesh(new THREE.TorusGeometry(2.38, 0.04, 10, 48), deepCrimsonGlowMat);
-    arenaPerimeterRing.rotation.x = Math.PI / 2;
-    arenaPerimeterRing.position.set(0, baseY + 0.35, 0);
-    this.arenaGroup.add(arenaPerimeterRing);
+    const matTopY = baseY + 0.68; // -1.32
+    this.arenaMatSurfaceY = matTopY;
 
-    const leftArc = new THREE.Mesh(new THREE.TorusGeometry(1.85, 0.036, 10, 28, Math.PI), cyanGlowMat);
+    // Octagon Canvas Floor Rings (Crimson Octagon Boundary + Blue/Red Corner Arcs + Gold Center Ring)
+    const octagonFloorRing = new THREE.Mesh(new THREE.TorusGeometry(2.36, 0.036, 8, 8), deepCrimsonGlowMat);
+    octagonFloorRing.rotation.x = Math.PI / 2;
+    octagonFloorRing.rotation.z = Math.PI / 8;
+    octagonFloorRing.position.set(0, matTopY + 0.015, 0);
+    this.arenaGroup.add(octagonFloorRing);
+
+    const leftArc = new THREE.Mesh(new THREE.TorusGeometry(1.78, 0.034, 8, 24, Math.PI), cyanGlowMat);
     leftArc.rotation.x = Math.PI / 2;
     leftArc.rotation.z = Math.PI / 2;
-    leftArc.position.set(0, baseY + 0.355, 0);
+    leftArc.position.set(0, matTopY + 0.018, 0);
     this.arenaGroup.add(leftArc);
 
-    const rightArc = new THREE.Mesh(new THREE.TorusGeometry(1.85, 0.036, 10, 28, Math.PI), scarletNeonMat);
+    const rightArc = new THREE.Mesh(new THREE.TorusGeometry(1.78, 0.034, 8, 24, Math.PI), scarletNeonMat);
     rightArc.rotation.x = Math.PI / 2;
     rightArc.rotation.z = -Math.PI / 2;
-    rightArc.position.set(0, baseY + 0.355, 0);
+    rightArc.position.set(0, matTopY + 0.018, 0);
     this.arenaGroup.add(rightArc);
 
-    const centerRing = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.032, 10, 32), goldTrimMat);
+    const centerRing = new THREE.Mesh(new THREE.TorusGeometry(0.84, 0.03, 8, 8), goldTrimMat);
     centerRing.rotation.x = Math.PI / 2;
-    centerRing.position.set(0, baseY + 0.36, 0);
+    centerRing.rotation.z = Math.PI / 8;
+    centerRing.position.set(0, matTopY + 0.02, 0);
     this.arenaGroup.add(centerRing);
 
-    // 4 Inner Colosseum Corner Pylons with Floating Energy Crystals
+    const centerCore = new THREE.Mesh(new THREE.CircleGeometry(0.32, 8), goldTrimMat);
+    centerCore.rotation.x = -Math.PI / 2;
+    centerCore.rotation.z = Math.PI / 8;
+    centerCore.position.set(0, matTopY + 0.014, 0);
+    this.arenaGroup.add(centerCore);
+
+    // 8 Octagonal Cage Corner Posts + Dual Perimeter Cage Rails (Low Profile so Overhead 2.5D View Is 100% Unobstructed)
+    const cageRadius = 2.48;
+    const cageHeight = 0.68;
+    for (let i = 0; i < 8; i++) {
+      const ang = (i * Math.PI) / 4 + Math.PI / 8;
+      const px = Math.cos(ang) * cageRadius;
+      const pz = Math.sin(ang) * cageRadius;
+
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.068, cageHeight, 8), tankFrameMat);
+      post.position.set(px, matTopY + cageHeight * 0.5, pz);
+      this.arenaGroup.add(post);
+
+      const postPad = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.068, 0.068, 0.24, 8),
+        px < 0 ? cyanGlowMat : scarletNeonMat
+      );
+      postPad.position.set(px, matTopY + cageHeight - 0.14, pz);
+      this.arenaGroup.add(postPad);
+    }
+
+    const lowerCageRail = new THREE.Mesh(new THREE.TorusGeometry(cageRadius, 0.024, 6, 8), tankFrameMat);
+    lowerCageRail.rotation.x = Math.PI / 2;
+    lowerCageRail.rotation.z = Math.PI / 8;
+    lowerCageRail.position.set(0, matTopY + 0.28, 0);
+    this.arenaGroup.add(lowerCageRail);
+
+    const upperCageRail = new THREE.Mesh(new THREE.TorusGeometry(cageRadius, 0.026, 6, 8), deepCrimsonGlowMat);
+    upperCageRail.rotation.x = Math.PI / 2;
+    upperCageRail.rotation.z = Math.PI / 8;
+    upperCageRail.position.set(0, matTopY + cageHeight - 0.03, 0);
+    this.arenaGroup.add(upperCageRail);
+
+    // 4 Outer Corner Colosseum Pylons with Floating Energy Crystals
     const pillarCoords = [
-      { x: -2.2, z: -1.15, isPlayer: true },
-      { x: -2.2, z: 1.15, isPlayer: true },
-      { x: 2.2, z: -1.15, isPlayer: false },
-      { x: 2.2, z: 1.15, isPlayer: false },
+      { x: -3.05, z: -1.85, isPlayer: true },
+      { x: -3.05, z: 1.85, isPlayer: true },
+      { x: 3.05, z: -1.85, isPlayer: false },
+      { x: 3.05, z: 1.85, isPlayer: false },
     ];
     pillarCoords.forEach((pc, idx) => {
       const pGroup = new THREE.Group();
       const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.26, 8), basaltMat);
       base.position.y = 0.13;
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 1.55, 8), slateMat);
-      shaft.position.y = 0.96;
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 1.35, 8), slateMat);
+      shaft.position.y = 0.88;
       const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.15, 0.18, 8), goldTrimMat);
-      cap.position.y = 1.8;
+      cap.position.y = 1.62;
 
       const orb = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.14, 0),
         pc.isPlayer ? cyanGlowMat : scarletNeonMat
       );
-      orb.position.y = 2.15;
+      orb.position.y = 1.98;
       pGroup.add(base, shaft, cap, orb);
       pGroup.position.set(pc.x, baseY + 0.12, pc.z);
       this.arenaGroup.add(pGroup);
-      this.arenaAnimatedNodes.push({ obj: orb, baseY: 2.15, phase: idx * 1.4 });
+      this.arenaAnimatedNodes.push({ obj: orb, baseY: 1.98, phase: idx * 1.4 });
     });
 
+    // Fighter Floor Indicator Rings (follow fighters across the 2.5D Octagon Mat)
+    const pRingGeom = new THREE.RingGeometry(0.32, 0.42, 32);
+    pRingGeom.rotateX(-Math.PI / 2);
+    const pRingMat = new THREE.MeshBasicMaterial({
+      color: 0x22d3ee,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.playerGroundRing = new THREE.Mesh(pRingGeom, pRingMat);
+    this.playerGroundRing.position.set(this.arenaCenterX - 1.32, matTopY + 0.025, 0);
+    this.playerGroundRing.visible = false;
+    this.scene.add(this.playerGroundRing);
+
+    const rRingGeom = new THREE.RingGeometry(0.32, 0.42, 32);
+    rRingGeom.rotateX(-Math.PI / 2);
+    const rRingMat = new THREE.MeshBasicMaterial({
+      color: 0xfb7185,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.rivalGroundRing = new THREE.Mesh(rRingGeom, rRingMat);
+    this.rivalGroundRing.position.set(this.arenaCenterX + 1.32, matTopY + 0.025, 0);
+    this.rivalGroundRing.visible = false;
+    this.scene.add(this.rivalGroundRing);
+
     // Dedicated Battle Tank Lights (Crimson Core + Rival/Player Side Accents)
-    this.arenaCyanLight = new THREE.PointLight(0xfb7185, 1.8, 8);
-    this.arenaCyanLight.position.set(-2.1, 1.35, 1.0);
+    this.arenaCyanLight = new THREE.PointLight(0x38bdf8, 1.8, 8);
+    this.arenaCyanLight.position.set(-2.2, 1.35, 1.1);
     this.arenaCrimsonLight = new THREE.PointLight(0xef4444, 2.8, 9.5);
-    this.arenaCrimsonLight.position.set(2.1, 1.35, 1.0);
+    this.arenaCrimsonLight.position.set(2.2, 1.35, 1.1);
     this.arenaBackRedLight = new THREE.PointLight(0xe11d48, 3.2, 10);
-    this.arenaBackRedLight.position.set(0, 0.9, -1.25);
+    this.arenaBackRedLight.position.set(0, 1.1, -1.35);
     this.arenaGroup.add(this.arenaCyanLight, this.arenaCrimsonLight, this.arenaBackRedLight);
   }
 
@@ -1872,7 +1893,10 @@ export class AquariumScene {
     }
 
     if (this.keyLight) {
-      this.keyLight.position.x = THREE.MathUtils.lerp(2.4, this.arenaCenterX + 2.4, t);
+      const lx = THREE.MathUtils.lerp(0, this.arenaCenterX, t);
+      this.keyLight.position.x = lx + 2.4;
+      this.keyLight.target.position.x = lx;
+      this.keyLight.target.updateMatrixWorld();
     }
 
     if (this.hemiLight) {
@@ -1970,13 +1994,13 @@ export class AquariumScene {
       return;
     }
 
-    // Compute exact world snout position along fish heading & pitch (YZX order, mouthReach = 0.52)
+    // Compute exact world snout position along fish heading & pitch (YZX order, leveled GLB snout reach)
     const heading = this.fish.group.rotation.y;
     const pitch = this.fish.group.rotation.z;
-    const mouthReach = 0.52;
+    const mouthReach = 0.72;
     _mouthPos.set(
       Math.cos(heading) * Math.cos(pitch) * mouthReach,
-      Math.sin(pitch) * mouthReach + 0.03,
+      Math.sin(pitch) * mouthReach - 0.02,
       -Math.sin(heading) * Math.cos(pitch) * mouthReach
     ).add(this.fish.currentPosition);
 
@@ -2146,31 +2170,46 @@ export class AquariumScene {
 
   public enterFighterMode(opponentSkin: FishColorPalette, opponentVip = false, previewOnly = true) {
     this.fighterMode = true;
+    this.fighterActive = !previewOnly;
     this.opponentFish.updateSkin(opponentSkin);
     this.opponentFish.setVip(opponentVip);
     this.opponentFish.group.visible = true;
+    this.playerGroundRing.visible = true;
+    this.rivalGroundRing.visible = true;
 
-    const playerStance = new THREE.Vector3(this.arenaCenterX - 1.35, 0.25, 0.18);
-    const rivalStance = new THREE.Vector3(this.arenaCenterX + 1.35, 0.25, 0.18);
+    const stanceY = previewOnly ? -0.18 : -0.62;
+    const playerStance = new THREE.Vector3(this.arenaCenterX - 1.32, stanceY, 0.06);
+    const rivalStance = new THREE.Vector3(this.arenaCenterX + 1.32, stanceY, 0.06);
     this.opponentFish.currentPosition.copy(rivalStance);
     this.opponentFish.group.position.copy(rivalStance);
 
     this.fish.enterCombat(playerStance, 0, previewOnly);
     this.opponentFish.enterCombat(rivalStance, Math.PI, previewOnly);
-    this.createTapRipple(new THREE.Vector3(this.arenaCenterX, 0.25, 0.2), 1.6);
+    this.fish.setCombatOpponentRef(this.opponentFish.currentPosition);
+    this.opponentFish.setCombatOpponentRef(this.fish.currentPosition);
+    this.createTapRipple(new THREE.Vector3(this.arenaCenterX, this.arenaMatSurfaceY + 0.15, 0), 1.6);
   }
 
   public setFighterActive(active: boolean) {
+    this.fighterActive = active;
     this.fish.setCombatPreview(!active);
     this.opponentFish.setCombatPreview(!active);
+    const stanceY = active ? -0.62 : -0.18;
+    this.fish.setCombatHomeY(stanceY);
+    this.opponentFish.setCombatHomeY(stanceY);
     if (active) {
-      this.createTapRipple(new THREE.Vector3(this.arenaCenterX, 0.25, 0.2), 1.8);
+      this.createTapRipple(new THREE.Vector3(this.arenaCenterX, this.arenaMatSurfaceY + 0.15, 0), 1.9);
     }
   }
 
   public exitFighterMode() {
     this.fighterMode = false;
+    this.fighterActive = false;
     this.opponentFish.group.visible = false;
+    this.playerGroundRing.visible = false;
+    this.rivalGroundRing.visible = false;
+    this.fish.setCombatOpponentRef(null);
+    this.opponentFish.setCombatOpponentRef(null);
     // Place fish at the right side of the main aquarium facing left so it visibly swims home alongside camera slide
     if (this.fish.currentPosition.x > 3.6) {
       this.fish.currentPosition.set(3.35, 0.24, 0.18);
@@ -2199,6 +2238,7 @@ export class AquariumScene {
       | 'crit_hit'
   ) {
     const fishObj = actor === 'player' ? this.fish : this.opponentFish;
+    const otherFish = actor === 'player' ? this.opponentFish : this.fish;
     const dirX = actor === 'player' ? 1 : -1;
 
     if (kind === 'windup') {
@@ -2206,7 +2246,7 @@ export class AquariumScene {
       this.spawnCombatImpactVfx(
         fishObj.currentPosition.x,
         fishObj.currentPosition.y,
-        fishObj.currentPosition.z + 0.1,
+        fishObj.currentPosition.z,
         0xf43f5e,
         'windup'
       );
@@ -2232,7 +2272,9 @@ export class AquariumScene {
     }
 
     fishObj.triggerCombatStrike(dirX, kind);
-    const impactX = this.arenaCenterX + dirX * 0.25;
+    const impactX = (fishObj.currentPosition.x + otherFish.currentPosition.x) * 0.5;
+    const impactY = otherFish.currentPosition.y + 0.08;
+    const impactZ = (fishObj.currentPosition.z + otherFish.currentPosition.z) * 0.5;
     const impactColor =
       kind === 'ultimate'
         ? 0xfacc15
@@ -2246,22 +2288,22 @@ export class AquariumScene {
         ? 0x67e8f9
         : 0xfb7185;
 
-    this.spawnCombatImpactVfx(impactX, 0.28, 0.3, impactColor, kind);
+    this.spawnCombatImpactVfx(impactX, impactY, impactZ, impactColor, kind);
     const impactScale =
       kind === 'ultimate' ? 2.4 : kind === 'parry' ? 1.9 : kind === 'heavy' ? 1.5 : 0.95;
-    this.createTapRipple(new THREE.Vector3(impactX, 0.25, 0.25), impactScale);
+    this.createTapRipple(new THREE.Vector3(impactX, impactY, impactZ), impactScale);
 
     if (kind === 'ultimate') {
       this.arenaShakeIntensity = 0.32;
-      this.arenaImpactZoom = 0.65;
+      this.arenaImpactZoom = 0.55;
       this.arenaFlashIntensity = 3.2;
     } else if (kind === 'parry') {
       this.arenaShakeIntensity = 0.24;
-      this.arenaImpactZoom = 0.45;
+      this.arenaImpactZoom = 0.38;
       this.arenaFlashIntensity = 2.4;
     } else if (kind === 'heavy') {
       this.arenaShakeIntensity = 0.16;
-      this.arenaImpactZoom = 0.28;
+      this.arenaImpactZoom = 0.24;
       this.arenaFlashIntensity = 1.6;
     } else {
       this.arenaShakeIntensity = Math.max(this.arenaShakeIntensity, 0.06);
@@ -2277,7 +2319,7 @@ export class AquariumScene {
     kind: 'light' | 'heavy' | 'ultimate' | 'parry' | 'windup'
   ) {
     if (kind === 'windup') {
-      const ringGeom = new THREE.RingGeometry(0.18, 0.25, 24);
+      const ringGeom = new THREE.RingGeometry(0.18, 0.26, 24);
       const ringMat = new THREE.MeshBasicMaterial({
         color: colorHex,
         transparent: true,
@@ -2288,6 +2330,7 @@ export class AquariumScene {
       });
       const ringMesh = new THREE.Mesh(ringGeom, ringMat);
       ringMesh.position.set(x, y, z);
+      ringMesh.rotation.x = this.fighterActive ? -Math.PI / 2 : 0;
       this.combatVfxGroup.add(ringMesh);
       this.activeCombatVfx.push({
         mesh: ringMesh,
@@ -2301,7 +2344,7 @@ export class AquariumScene {
       return;
     }
 
-    // 1. Slashing Crescent Arc
+    // 1. Slashing Crescent Arc (tilted nicely for both 2.5D top-down & front cam)
     const arcLen = kind === 'ultimate' ? Math.PI * 1.45 : kind === 'heavy' || kind === 'parry' ? Math.PI * 1.1 : Math.PI * 0.85;
     const slashGeom = new THREE.RingGeometry(
       kind === 'ultimate' ? 0.42 : 0.28,
@@ -2321,6 +2364,7 @@ export class AquariumScene {
     });
     const slash = new THREE.Mesh(slashGeom, slashMat);
     slash.position.set(x, y, z);
+    slash.rotation.x = this.fighterActive ? -Math.PI / 2.6 : 0;
     slash.rotation.z = (Math.random() - 0.5) * 1.6;
     slash.rotation.y = (Math.random() - 0.5) * 0.4;
     this.combatVfxGroup.add(slash);
@@ -2334,9 +2378,9 @@ export class AquariumScene {
       kind: 'slash',
     });
 
-    // 2. Shockwave Pressure Ring
+    // 2. Shockwave Pressure Ring (flat on the 2.5D Octagon Mat plane during matches!)
     if (kind === 'heavy' || kind === 'ultimate' || kind === 'parry') {
-      const shockGeom = new THREE.RingGeometry(0.12, 0.22, 28);
+      const shockGeom = new THREE.RingGeometry(0.14, 0.24, 28);
       const shockMat = new THREE.MeshBasicMaterial({
         color: kind === 'ultimate' ? 0xfef08a : 0xffffff,
         transparent: true,
@@ -2346,7 +2390,8 @@ export class AquariumScene {
         depthWrite: false,
       });
       const shock = new THREE.Mesh(shockGeom, shockMat);
-      shock.position.set(x, y, z + 0.05);
+      shock.position.set(x, this.arenaMatSurfaceY + 0.04, z);
+      shock.rotation.x = this.fighterActive ? -Math.PI / 2 : 0;
       this.combatVfxGroup.add(shock);
       this.activeCombatVfx.push({
         mesh: shock,
@@ -2497,7 +2542,23 @@ export class AquariumScene {
         this.arenaCyanLight.intensity = 1.8 + this.arenaFlashIntensity * 0.7;
       }
 
-      // Smooth horizontal slide between Aquarium (X=0) and PvP Fighter Arena (X=12)
+      // Update Fighter Floor Rings & Smoothly transition between Front Lobby and 2.5D Overhead Octagon Camera
+      if (this.fighterMode) {
+        this.playerGroundRing.position.set(
+          this.fish.currentPosition.x,
+          this.arenaMatSurfaceY + 0.025,
+          this.fish.currentPosition.z
+        );
+        this.rivalGroundRing.position.set(
+          this.opponentFish.currentPosition.x,
+          this.arenaMatSurfaceY + 0.025,
+          this.opponentFish.currentPosition.z
+        );
+        const pulseScale = 1 + Math.sin(time * 4.5) * 0.06;
+        this.playerGroundRing.scale.setScalar(pulseScale);
+        this.rivalGroundRing.scale.setScalar(pulseScale);
+      }
+
       const shakeX = this.arenaShakeIntensity > 0.003 ? (Math.random() - 0.5) * this.arenaShakeIntensity : 0;
       const shakeY = this.arenaShakeIntensity > 0.003 ? (Math.random() - 0.5) * this.arenaShakeIntensity : 0;
 
@@ -2505,19 +2566,27 @@ export class AquariumScene {
         ? this.arenaCenterX
         : THREE.MathUtils.clamp(this.fish.currentPosition.x * 0.16, -0.5, 0.5);
       const targetCamY = this.fighterMode
-        ? 0.42
+        ? this.fighterActive
+          ? this.arenaOverheadY - this.arenaImpactZoom * 0.45
+          : 0.42
         : THREE.MathUtils.clamp(0.24 + this.fish.currentPosition.y * 0.12, -0.2, 0.6);
-      const targetCamZ = this.fighterMode ? this.arenaAspectZ - this.arenaImpactZoom : this.currentCameraPos.z;
+      const targetCamZ = this.fighterMode
+        ? this.fighterActive
+          ? this.arenaOverheadZ - this.arenaImpactZoom * 0.45
+          : this.arenaAspectZ - this.arenaImpactZoom
+        : this.currentCameraPos.z;
       const targetLookX = this.fighterMode ? this.arenaCenterX : 0;
-      const targetLookY = this.fighterMode ? 0.18 : 0.12;
+      const targetLookY = this.fighterMode ? (this.fighterActive ? -0.92 : -0.1) : 0.12;
+      const targetLookZ = this.fighterMode && this.fighterActive ? 0.04 : 0;
 
-      const camLambda = this.fighterMode ? 4.8 : 3.4;
+      const camLambda = this.fighterMode ? (this.fighterActive ? 3.8 : 4.2) : 3.4;
       this.camera.position.x = THREE.MathUtils.damp(this.camera.position.x, targetCamX, camLambda, delta) + shakeX;
       this.camera.position.y = THREE.MathUtils.damp(this.camera.position.y, targetCamY, camLambda, delta) + shakeY;
       this.camera.position.z = THREE.MathUtils.damp(this.camera.position.z, targetCamZ, camLambda, delta);
 
       this.cameraTarget.x = THREE.MathUtils.damp(this.cameraTarget.x, targetLookX, camLambda, delta);
       this.cameraTarget.y = THREE.MathUtils.damp(this.cameraTarget.y, targetLookY, camLambda, delta);
+      this.cameraTarget.z = THREE.MathUtils.damp(this.cameraTarget.z, targetLookZ, camLambda, delta);
       this.camera.lookAt(this.cameraTarget);
 
       this.renderer.render(this.scene, this.camera);
@@ -2592,6 +2661,14 @@ export class AquariumScene {
     this.disposeGroupResources(this.combatVfxGroup);
     this.fish.dispose();
     this.opponentFish.dispose();
+    if (this.playerGroundRing) {
+      this.playerGroundRing.geometry.dispose();
+      (this.playerGroundRing.material as THREE.Material).dispose();
+    }
+    if (this.rivalGroundRing) {
+      this.rivalGroundRing.geometry.dispose();
+      (this.rivalGroundRing.material as THREE.Material).dispose();
+    }
     this.causticTexture.dispose();
     this.sandTexture.dispose();
     this.renderer.dispose();

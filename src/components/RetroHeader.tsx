@@ -4,13 +4,14 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, VolumeX, Music, Sparkles, Edit2, Check, Settings, X } from 'lucide-react';
+import { Volume2, VolumeX, Music, Sparkles, Edit2, Check, Settings, X, Plus } from 'lucide-react';
 import { FishStats } from '../types';
 import { retroAudio } from '../services/retroAudio';
 
 interface RetroHeaderProps {
   stats: FishStats;
   onUpdateName: (newName: string) => void;
+  onOpenDonate: () => void;
   crtEnabled: boolean;
   onToggleCrt: () => void;
   bgmActive: boolean;
@@ -22,6 +23,7 @@ interface RetroHeaderProps {
 export const RetroHeader: React.FC<RetroHeaderProps> = ({
   stats,
   onUpdateName,
+  onOpenDonate,
   crtEnabled,
   onToggleCrt,
   bgmActive,
@@ -127,7 +129,7 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
                     <button
                       type="button"
                       onClick={handleNameSave}
-                      className="ui-btn p-1.5 bg-emerald-500 hover:bg-emerald-400 border-emerald-300/40 text-slate-950 rounded-lg"
+                      className="ui-btn glass-btn-emerald p-1.5 rounded-lg"
                       aria-label="Сохранить имя"
                     >
                       <Check className="w-3.5 h-3.5" />
@@ -169,7 +171,7 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
           </div>
 
           {/* Center (Desktop): Vitality Bars */}
-          <div className="hidden lg:flex items-center gap-4 bg-slate-950/65 border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] px-4 py-1.5 rounded-xl">
+          <div className="hidden lg:flex items-center gap-4 bg-white/[0.06] backdrop-blur-md border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] px-4 py-1.5 rounded-xl">
             <div className="flex items-center gap-2" title="Сытость">
               <span className="text-xs text-slate-300 font-medium">Сытость</span>
               <div className="w-16 h-2 bg-slate-900 border border-white/10 rounded-full overflow-hidden">
@@ -214,13 +216,26 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
             </div>
           </div>
 
-          {/* Right: Currency & Settings Gear */}
+          {/* Right: Single Coin Currency Button (+ on the right opens Donate menu) & Settings Gear */}
           <div className="flex items-center gap-2" ref={settingsRef}>
-            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-950/75 border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] text-xs font-mono font-bold">
-              <span className="text-amber-300 tabular-nums whitespace-nowrap">🪙 {stats.coins}</span>
-              <span className="text-white/15">|</span>
-              <span className="text-fuchsia-300 tabular-nums whitespace-nowrap">🦪 {stats.pearls}</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                retroAudio.playBlip(680, 0.05);
+                onOpenDonate();
+              }}
+              title="Пополнить монеты / Донат"
+              aria-label={`Монеты: ${stats.coins}. Открыть меню доната`}
+              className="ui-btn group pl-3 pr-1.5 py-1 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 border-amber-300/35 hover:border-amber-200/65 text-xs font-mono font-bold"
+            >
+              <span className="text-amber-200 tabular-nums whitespace-nowrap flex items-center gap-1.5">
+                <span>🪙</span>
+                <span>{stats.coins}</span>
+              </span>
+              <span className="w-5 h-5 rounded-lg bg-gradient-to-b from-amber-300/90 to-amber-500/90 group-hover:from-amber-200 group-hover:to-amber-400 text-slate-950 border border-amber-100/50 flex items-center justify-center shadow-[0_2px_8px_rgba(251,191,36,0.35)] transition-transform group-hover:scale-105">
+                <Plus className="w-3.5 h-3.5 stroke-[2.75]" />
+              </span>
+            </button>
 
             <button
               type="button"
@@ -228,10 +243,8 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
                 retroAudio.playBlip(640, 0.05);
                 setShowSettings((prev) => !prev);
               }}
-              className={`ui-btn p-2 rounded-xl transition-all ${
-                showSettings
-                  ? 'bg-cyan-500/25 border-cyan-400/60 text-cyan-200'
-                  : 'bg-slate-900/85 border-white/15 text-slate-200 hover:text-white hover:border-white/30'
+              className={`ui-btn p-2 rounded-xl ${
+                showSettings ? 'glass-btn-cyan' : 'glass-btn'
               }`}
               title="Настройки"
               aria-label="Настройки"
@@ -251,7 +264,7 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowSettings(false)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                    className="ui-btn glass-btn p-1 rounded-lg"
                     aria-label="Закрыть настройки"
                   >
                     <X className="w-4 h-4" />
@@ -266,18 +279,18 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
                       onToggleBgm();
                       retroAudio.playBlip(620, 0.05);
                     }}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-slate-900/85 hover:bg-slate-800/90 border border-white/10 transition-colors text-left"
+                    className="ui-btn glass-btn w-full justify-between gap-3 px-3 py-2.5 text-left"
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${bgmActive ? 'bg-indigo-500/25 text-indigo-300' : 'bg-slate-800 text-slate-400'}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${bgmActive ? 'bg-indigo-500/25 text-indigo-300' : 'bg-white/10 text-slate-300'}`}>
                         <Music className="w-4 h-4" />
                       </div>
                       <div>
                         <div className="text-xs font-semibold text-white">Музыка</div>
-                        <div className="text-[11px] text-slate-400">Фоновая мелодия</div>
+                        <div className="text-[11px] font-normal text-slate-300/80">Фоновая мелодия</div>
                       </div>
                     </div>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${bgmActive ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-400/40' : 'bg-slate-800 text-slate-400 border border-white/10'}`}>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${bgmActive ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-400/40' : 'bg-white/10 text-slate-300 border border-white/15'}`}>
                       {bgmActive ? 'ВКЛ' : 'ВЫКЛ'}
                     </span>
                   </button>
@@ -289,18 +302,18 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
                       onToggleMute();
                       retroAudio.playBlip(550, 0.05);
                     }}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-slate-900/85 hover:bg-slate-800/90 border border-white/10 transition-colors text-left"
+                    className="ui-btn glass-btn w-full justify-between gap-3 px-3 py-2.5 text-left"
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${!soundMuted ? 'bg-emerald-500/25 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${!soundMuted ? 'bg-emerald-500/25 text-emerald-300' : 'bg-white/10 text-slate-300'}`}>
                         {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                       </div>
                       <div>
                         <div className="text-xs font-semibold text-white">Звук</div>
-                        <div className="text-[11px] text-slate-400">Эффекты воды и арены</div>
+                        <div className="text-[11px] font-normal text-slate-300/80">Эффекты воды и арены</div>
                       </div>
                     </div>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${!soundMuted ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40' : 'bg-slate-800 text-slate-400 border border-white/10'}`}>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${!soundMuted ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40' : 'bg-white/10 text-slate-300 border border-white/15'}`}>
                       {!soundMuted ? 'ВКЛ' : 'ВЫКЛ'}
                     </span>
                   </button>
@@ -312,18 +325,18 @@ export const RetroHeader: React.FC<RetroHeaderProps> = ({
                       onToggleCrt();
                       retroAudio.playBlip(700, 0.06);
                     }}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-slate-900/85 hover:bg-slate-800/90 border border-white/10 transition-colors text-left"
+                    className="ui-btn glass-btn w-full justify-between gap-3 px-3 py-2.5 text-left"
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${crtEnabled ? 'bg-cyan-500/25 text-cyan-300' : 'bg-slate-800 text-slate-400'}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${crtEnabled ? 'bg-cyan-500/25 text-cyan-300' : 'bg-white/10 text-slate-300'}`}>
                         <Sparkles className="w-4 h-4" />
                       </div>
                       <div>
                         <div className="text-xs font-semibold text-white">Фильтр</div>
-                        <div className="text-[11px] text-slate-400">Атмосферный ретро-эффект</div>
+                        <div className="text-[11px] font-normal text-slate-300/80">Атмосферный ретро-эффект</div>
                       </div>
                     </div>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${crtEnabled ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/40' : 'bg-slate-800 text-slate-400 border border-white/10'}`}>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${crtEnabled ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/40' : 'bg-white/10 text-slate-300 border border-white/15'}`}>
                       {crtEnabled ? 'ВКЛ' : 'ВЫКЛ'}
                     </span>
                   </button>

@@ -4,8 +4,21 @@
  */
 
 import * as THREE from 'three';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { FISH_SKINS } from '../services/storage';
 import { FishColorPalette } from '../types';
+
+let sharedBettaGltfPromise: Promise<GLTF> | null = null;
+function loadSharedBettaGltf(): Promise<GLTF> {
+  if (!sharedBettaGltfPromise) {
+    const loader = new GLTFLoader();
+    sharedBettaGltfPromise = new Promise<GLTF>((resolve, reject) => {
+      loader.load('/models/betta.glb', resolve, undefined, reject);
+    });
+  }
+  return sharedBettaGltfPromise;
+}
 
 interface PaletteColors {
   bodyBase: string;
@@ -110,6 +123,10 @@ const BETTA_PALETTES: Record<FishColorPalette, PaletteColors> = {
 // Pre-allocated scratch math helpers (zero GC in loop)
 const _toTarget = new THREE.Vector3();
 const _desiredVel = new THREE.Vector3();
+const _axisX = new THREE.Vector3(1, 0, 0);
+const _axisZ = new THREE.Vector3(0, 0, 1);
+const _waveQuat = new THREE.Quaternion();
+const _extraQuat = new THREE.Quaternion();
 
 function shortestAngleDiff(from: number, to: number): number {
   let diff = (to - from + Math.PI) % (Math.PI * 2);
@@ -218,6 +235,8 @@ export class BettaFish {
   private combatPreview: boolean = false;
   private combatHomePos: THREE.Vector3 = new THREE.Vector3();
   private combatFacing: number = 0;
+  private combatBaseFacing: number = 0;
+  private combatTargetPos: THREE.Vector3 | null = null;
   private combatDashOffset: THREE.Vector3 = new THREE.Vector3();
   private combatRecoil: number = 0;
   private combatSpin: number = 0;
@@ -227,10 +246,43 @@ export class BettaFish {
   private shieldMaterial!: THREE.MeshBasicMaterial;
   private combatGuardActive: boolean = false;
 
+  // Imported GLB Betta model & skeletal AnimationMixer + procedural spinal S-wave
+  private glbRoot: THREE.Group;
+  private glbMixer: THREE.AnimationMixer | null = null;
+  private glbAction: THREE.AnimationAction | null = null;
+  private glbMaterials: { mat: THREE.MeshStandardMaterial; baseMetalness: number; baseRoughness: number }[] = [];
+  private glbSpineBones: {
+    node: THREE.Object3D;
+    restQuat: THREE.Quaternion;
+    phaseLag: number;
+    ampFactor: number;
+    turnWeight: number;
+    useLiveQuat?: boolean;
+  }[] = [];
+  private glbLeftPectoral: THREE.Object3D | null = null;
+  private glbRightPectoral: THREE.Object3D | null = null;
+  private glbPelvicBones: {
+    node: THREE.Object3D;
+    side: 1 | -1;
+    phaseLag: number;
+    ampX: number;
+    ampZ: number;
+  }[] = [];
+  private glbCubeNode: THREE.Object3D | null = null;
+  private glbCubeRestPos: THREE.Vector3 = new THREE.Vector3();
+  private glbCubeRestQuat: THREE.Quaternion = new THREE.Quaternion();
+  private glbSwimPhase: number = 0;
+  private glbPecPhase: number = 0;
+  private smoothedTurnDelta: number = 0;
+  private glbReady: boolean = false;
+  private isDisposed: boolean = false;
+
   constructor(skinId: FishColorPalette = 'tropical_paradise', isSoftwareGl = false) {
     this.isSoftwareGl = isSoftwareGl;
     this.group = new THREE.Group();
     this.fishRoot = new THREE.Group();
+    this.glbRoot = new THREE.Group();
+    this.glbRoot.visible = false;
     this.vipCrownGroup = new THREE.Group();
     this.currentSkinId = skinId;
 
@@ -247,12 +299,207 @@ export class BettaFish {
     this.fishRoot.scale.setScalar(0.62);
     this.group.rotation.order = 'YZX';
     this.group.add(this.fishRoot);
-    this.fishRoot.add(this.vipCrownGroup);
+    this.group.add(this.glbRoot);
+
+    this.vipCrownGroup.scale.setScalar(0.62);
+    this.vipCrownGroup.position.set(0.46 * 0.62, 0.31 * 0.62, 0);
+    this.group.add(this.vipCrownGroup);
     this.vipCrownGroup.visible = false;
+
+    this.initGlbModel();
+  }
+
+  private initGlbModel() {
+    loadSharedBettaGltf()
+      .then((gltf) => {
+        if (this.isDisposed) return;
+
+        const cloned = cloneSkinned(gltf.scene);
+        const spineSpec: Record<
+          string,
+          { phaseLag: number; ampFactor: number; turnWeight: number; useLiveQuat?: boolean }
+        > = {
+          // Spinal travel wave (head steady -> mid-body flex -> peduncle whip)
+          Bone_Armature: { phaseLag: 0.0, ampFactor: -0.045, turnWeight: 0.05 },
+          'Bone.002_Armature': { phaseLag: 0.65, ampFactor: 0.115, turnWeight: 0.28 },
+          'Bone.003_Armature': { phaseLag: 1.35, ampFactor: 0.165, turnWeight: 0.42 },
+          'Bone.004_Armature': { phaseLag: 2.05, ampFactor: 0.21, turnWeight: 0.46 },
+          'Bone.005_Armature': { phaseLag: 2.75, ampFactor: 0.24, turnWeight: 0.42 },
+          'Bone.039_Armature': { phaseLag: 3.45, ampFactor: 0.27, turnWeight: 0.34 },
+          // Halfmoon Caudal Fin Fan (base rays + flowing outer tips)
+          'Bone.040_Armature': { phaseLag: 4.10, ampFactor: 0.22, turnWeight: 0.24 },
+          'Bone.042_Armature': { phaseLag: 4.10, ampFactor: 0.24, turnWeight: 0.24 },
+          'Bone.044_Armature': { phaseLag: 4.10, ampFactor: 0.22, turnWeight: 0.24 },
+          'Bone.041_Armature': { phaseLag: 4.85, ampFactor: 0.24, turnWeight: 0.18, useLiveQuat: true },
+          'Bone.043_Armature': { phaseLag: 4.85, ampFactor: 0.26, turnWeight: 0.18, useLiveQuat: true },
+          'Bone.045_Armature': { phaseLag: 4.85, ampFactor: 0.24, turnWeight: 0.18, useLiveQuat: true },
+          // Dorsal Veil Curtain (root -> mid -> trailing tips)
+          'Bone.018_Armature': { phaseLag: 1.60, ampFactor: 0.14, turnWeight: 0.18 },
+          'Bone.021_Armature': { phaseLag: 2.25, ampFactor: 0.20, turnWeight: 0.14, useLiveQuat: true },
+          'Bone.022_Armature': { phaseLag: 2.95, ampFactor: 0.25, turnWeight: 0.10 },
+          'Bone.019_Armature': { phaseLag: 2.20, ampFactor: 0.16, turnWeight: 0.22 },
+          'Bone.023_Armature': { phaseLag: 2.85, ampFactor: 0.22, turnWeight: 0.16, useLiveQuat: true },
+          'Bone.024_Armature': { phaseLag: 3.55, ampFactor: 0.27, turnWeight: 0.12, useLiveQuat: true },
+          'Bone.020_Armature': { phaseLag: 2.80, ampFactor: 0.18, turnWeight: 0.24 },
+          'Bone.025_Armature': { phaseLag: 3.45, ampFactor: 0.23, turnWeight: 0.18 },
+          'Bone.026_Armature': { phaseLag: 4.15, ampFactor: 0.28, turnWeight: 0.12, useLiveQuat: true },
+          // Anal Veil Curtain (root -> mid -> trailing tips)
+          'Bone.033_Armature': { phaseLag: 1.75, ampFactor: 0.14, turnWeight: 0.18 },
+          'Bone.035_Armature': { phaseLag: 2.40, ampFactor: 0.21, turnWeight: 0.14, useLiveQuat: true },
+          'Bone.037_Armature': { phaseLag: 3.10, ampFactor: 0.26, turnWeight: 0.10, useLiveQuat: true },
+          'Bone.034_Armature': { phaseLag: 2.40, ampFactor: 0.17, turnWeight: 0.22 },
+          'Bone.036_Armature': { phaseLag: 3.05, ampFactor: 0.24, turnWeight: 0.16, useLiveQuat: true },
+          'Bone.038_Armature': { phaseLag: 3.75, ampFactor: 0.29, turnWeight: 0.12, useLiveQuat: true },
+        };
+
+        const pelvicSpec: Record<string, { side: 1 | -1; phaseLag: number; ampX: number; ampZ: number }> = {
+          'Bone.029_Armature': { side: 1, phaseLag: 0.80, ampX: 0.28, ampZ: 0.14 },
+          'Bone.031_Armature': { side: 1, phaseLag: 1.55, ampX: 0.34, ampZ: 0.18 },
+          'Bone.030_Armature': { side: -1, phaseLag: 1.25, ampX: 0.28, ampZ: 0.14 },
+          'Bone.032_Armature': { side: -1, phaseLag: 2.00, ampX: 0.34, ampZ: 0.18 },
+        };
+
+        cloned.traverse((obj) => {
+          const nameLower = (obj.name || '').toLowerCase();
+          if (nameLower === 'cube_0' || nameLower === 'lamp') {
+            obj.visible = false;
+            return;
+          }
+          if (nameLower === 'cube') {
+            this.glbCubeNode = obj;
+            this.glbCubeRestPos.copy(obj.position);
+            this.glbCubeRestQuat.copy(obj.quaternion);
+          }
+
+          if (obj.name === 'Bone.012_Armature') {
+            this.glbLeftPectoral = obj;
+          } else if (obj.name === 'Bone.013_Armature') {
+            this.glbRightPectoral = obj;
+          }
+
+          const pSpec = pelvicSpec[obj.name];
+          if (pSpec) {
+            this.glbPelvicBones.push({
+              node: obj,
+              side: pSpec.side,
+              phaseLag: pSpec.phaseLag,
+              ampX: pSpec.ampX,
+              ampZ: pSpec.ampZ,
+            });
+          }
+
+          const spec = spineSpec[obj.name];
+          if (spec) {
+            this.glbSpineBones.push({
+              node: obj,
+              restQuat: obj.quaternion.clone(),
+              phaseLag: spec.phaseLag,
+              ampFactor: spec.ampFactor,
+              turnWeight: spec.turnWeight,
+              useLiveQuat: spec.useLiveQuat,
+            });
+          }
+
+          if ((obj as THREE.Mesh).isMesh) {
+            const mesh = obj as THREE.Mesh;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.frustumCulled = false;
+
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            const clonedMats = mats.map((m) => {
+              const clonedMat = m.clone() as THREE.MeshStandardMaterial;
+              if ((clonedMat.name || '').toLowerCase() === 'root') {
+                mesh.visible = false;
+              }
+              if (clonedMat.isMeshStandardMaterial) {
+                clonedMat.side = THREE.DoubleSide;
+                if (clonedMat.transparent) {
+                  clonedMat.alphaTest = 0.08;
+                  clonedMat.depthWrite = true;
+                }
+                this.glbMaterials.push({
+                  mat: clonedMat,
+                  baseMetalness: clonedMat.metalness ?? 0.1,
+                  baseRoughness: clonedMat.roughness ?? 0.45,
+                });
+              }
+              return clonedMat;
+            });
+            mesh.material = Array.isArray(mesh.material) ? clonedMats : clonedMats[0];
+          }
+        });
+
+        // Level the upward-posed Sketchfab Betta (~22 deg tail-down -> horizontal) and align +Z snout to +X
+        const levelPivot = new THREE.Group();
+        levelPivot.add(cloned);
+        levelPivot.rotation.x = 0.38;
+        levelPivot.position.set(0, -0.60, -0.85);
+
+        const orientPivot = new THREE.Group();
+        orientPivot.add(levelPivot);
+        orientPivot.rotation.y = Math.PI / 2;
+        orientPivot.scale.setScalar(0.29);
+
+        this.glbRoot.add(orientPivot);
+        this.glbRoot.visible = true;
+        this.fishRoot.visible = false;
+        this.glbReady = true;
+
+        // Reposition VIP crown & combat shield to fit the leveled GLB Betta head and body
+        this.vipCrownGroup.position.set(0.55, 0.28, 0);
+        this.vipCrownGroup.scale.setScalar(0.62);
+        if (this.shieldMesh) {
+          this.shieldMesh.position.set(0.02, 0.02, 0);
+          this.shieldMesh.scale.setScalar(1.0);
+        }
+
+        // Play embedded skeletal swimming animation ("Take 01")
+        if (gltf.animations && gltf.animations.length > 0) {
+          this.glbMixer = new THREE.AnimationMixer(cloned);
+          this.glbAction = this.glbMixer.clipAction(gltf.animations[0]);
+          this.glbAction.setLoop(THREE.LoopRepeat, Infinity);
+          this.glbAction.play();
+        }
+
+        this.applyGlbSkinTint(this.currentSkinId);
+      })
+      .catch((err) => {
+        console.warn('Could not load /models/betta.glb, keeping procedural Betta:', err);
+      });
+  }
+
+  private applyGlbSkinTint(skinId: FishColorPalette) {
+    if (this.glbMaterials.length === 0) return;
+
+    const tintMap: Record<FishColorPalette, number> = {
+      tropical_paradise: 0xffffff,
+      royal_blue: 0x93c5fd,
+      ruby_dragon: 0xfda4af,
+      cyan_halfmoon: 0x67e8f9,
+      black_samurai: 0x94a3b8,
+      sakura_blossom: 0xfbcfe8,
+      golden_imperial: 0xfde047,
+    };
+    const tintHex = tintMap[skinId] ?? 0xffffff;
+
+    for (const entry of this.glbMaterials) {
+      entry.mat.color.setHex(tintHex);
+      if (skinId === 'golden_imperial') {
+        entry.mat.metalness = Math.min(0.85, entry.baseMetalness + 0.45);
+        entry.mat.roughness = Math.max(0.2, entry.baseRoughness - 0.15);
+      } else if (skinId === 'black_samurai') {
+        entry.mat.metalness = Math.min(0.6, entry.baseMetalness + 0.25);
+        entry.mat.roughness = entry.baseRoughness;
+      } else {
+        entry.mat.metalness = entry.baseMetalness;
+        entry.mat.roughness = entry.baseRoughness;
+      }
+    }
   }
 
   private buildCombatShield() {
-    const geom = new THREE.SphereGeometry(1.45, 22, 16);
+    const geom = new THREE.SphereGeometry(0.95, 22, 16);
     this.shieldMaterial = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
       transparent: true,
@@ -263,9 +510,9 @@ export class BettaFish {
       blending: THREE.AdditiveBlending,
     });
     this.shieldMesh = new THREE.Mesh(geom, this.shieldMaterial);
-    this.shieldMesh.position.set(-0.35, 0, 0);
+    this.shieldMesh.position.set(-0.22, 0, 0);
     this.shieldMesh.visible = false;
-    this.fishRoot.add(this.shieldMesh);
+    this.group.add(this.shieldMesh);
   }
 
   private initTextures(palette: PaletteColors) {
@@ -1510,6 +1757,7 @@ export class BettaFish {
 
   public updateSkin(skinId: FishColorPalette) {
     this.currentSkinId = skinId;
+    this.applyGlbSkinTint(skinId);
     const palette = BETTA_PALETTES[skinId] || BETTA_PALETTES.tropical_paradise;
     const preset = FISH_SKINS[skinId] || FISH_SKINS.tropical_paradise;
 
@@ -1584,14 +1832,20 @@ export class BettaFish {
     this.animTime += delta * speedMult;
 
     if (this.combatMode) {
-      // PvP Arena combat positioning: spring toward stance + strike dash + recoil
-      const hoverX = Math.sin(this.animTime * 0.65) * (this.combatPreview ? 0.06 : 0.09);
-      const hoverY = Math.cos(this.animTime * 0.85) * (this.combatPreview ? 0.06 : 0.08) + (this.combatGuardActive ? 0.14 : 0);
+      // PvP Arena 2.5D combat positioning: circling footwork in (X, Z) octagon plane + strike lunge + recoil
+      const weaveSign = Math.abs(this.combatBaseFacing) < 1 ? 1 : -1;
+      const hoverX = this.combatPreview
+        ? Math.sin(this.animTime * 0.65) * 0.06
+        : Math.cos(this.animTime * 0.42) * 0.14 * weaveSign;
+      const hoverY =
+        Math.cos(this.animTime * 0.85) * (this.combatPreview ? 0.06 : 0.06) +
+        (this.combatGuardActive ? 0.1 : 0);
+      const hoverZ = this.combatPreview ? 0 : Math.sin(this.animTime * 0.34) * 0.52 * weaveSign;
 
       _toTarget.set(
         this.combatHomePos.x + this.combatDashOffset.x + hoverX,
         this.combatHomePos.y + this.combatDashOffset.y + hoverY,
-        this.combatHomePos.z + this.combatDashOffset.z
+        this.combatHomePos.z + this.combatDashOffset.z + hoverZ
       );
 
       this.currentPosition.x = THREE.MathUtils.damp(this.currentPosition.x, _toTarget.x, 8.5, delta);
@@ -1615,15 +1869,34 @@ export class BettaFish {
         this.bodyMaterial.emissive.setRGB(flash * 0.95, flash * 0.22, flash * 0.28);
         this.caudalMaterial.emissive.setRGB(flash * 0.9, flash * 0.25, flash * 0.3);
         this.sailMaterial.emissive.setRGB(flash * 0.9, flash * 0.25, flash * 0.3);
+        for (const entry of this.glbMaterials) {
+          entry.mat.emissive.setRGB(flash * 0.95, flash * 0.22, flash * 0.26);
+        }
       } else if (this.combatWindupActive) {
         const pulse = 0.25 + Math.sin(this.animTime * 3.5) * 0.14;
         this.bodyMaterial.emissive.setRGB(pulse * 0.9, pulse * 0.15, pulse * 0.1);
         this.caudalMaterial.emissive.setRGB(pulse * 0.85, pulse * 0.2, pulse * 0.08);
         this.sailMaterial.emissive.setRGB(pulse * 0.85, pulse * 0.2, pulse * 0.08);
+        for (const entry of this.glbMaterials) {
+          entry.mat.emissive.setRGB(pulse * 0.85, pulse * 0.18, pulse * 0.1);
+        }
       } else {
         this.bodyMaterial.emissive.setRGB(0, 0, 0);
         this.caudalMaterial.emissive.setRGB(0, 0, 0);
         this.sailMaterial.emissive.setRGB(0, 0, 0);
+        for (const entry of this.glbMaterials) {
+          entry.mat.emissive.setRGB(0, 0, 0);
+        }
+      }
+
+      if (!this.combatPreview && this.combatTargetPos) {
+        const dx = this.combatTargetPos.x - this.currentPosition.x;
+        const dz = this.combatTargetPos.z - this.currentPosition.z;
+        if (Math.hypot(dx, dz) > 0.25) {
+          this.combatFacing = Math.atan2(-dz, dx);
+        }
+      } else {
+        this.combatFacing = this.combatBaseFacing;
       }
 
       const headingDelta = shortestAngleDiff(this.headingAngle, this.combatFacing);
@@ -1660,6 +1933,9 @@ export class BettaFish {
         this.bodyMaterial.emissive.setRGB(0, 0, 0);
         this.caudalMaterial.emissive.setRGB(0, 0, 0);
         this.sailMaterial.emissive.setRGB(0, 0, 0);
+      }
+      for (const entry of this.glbMaterials) {
+        entry.mat.emissive.setRGB(0, 0, 0);
       }
       if (this.shieldMesh) this.shieldMesh.visible = false;
 
@@ -1724,6 +2000,7 @@ export class BettaFish {
           delta
         );
         this.rollAngle = THREE.MathUtils.damp(this.rollAngle, 0, 3.6, delta);
+        this.smoothedTurnDelta = THREE.MathUtils.damp(this.smoothedTurnDelta, 0, 4.5, delta);
       } else {
         const targetSpeed = this.isSleeping
           ? 0.24
@@ -1758,6 +2035,13 @@ export class BettaFish {
             this.headingAngle += headingDelta * (1 - Math.exp(-turnRate * delta));
           }
 
+          this.smoothedTurnDelta = THREE.MathUtils.damp(
+            this.smoothedTurnDelta,
+            THREE.MathUtils.clamp(headingDelta, -0.85, 0.85),
+            6.0,
+            delta
+          );
+
           const targetPitch = Math.asin(
             THREE.MathUtils.clamp(this.velocity.y / (velLen + 0.14), -0.38, 0.38)
           );
@@ -1769,54 +2053,152 @@ export class BettaFish {
       }
 
       if (!this.returningHome) {
-        this.currentPosition.x = THREE.MathUtils.clamp(this.currentPosition.x, boundBox.minX + 0.48, boundBox.maxX - 0.48);
-        this.currentPosition.y = THREE.MathUtils.clamp(this.currentPosition.y, boundBox.minY + 0.42, boundBox.maxY - 0.24);
-        this.currentPosition.z = THREE.MathUtils.clamp(this.currentPosition.z, boundBox.minZ + 0.35, boundBox.maxZ - 0.35);
+        this.currentPosition.x = THREE.MathUtils.clamp(this.currentPosition.x, boundBox.minX + 0.55, boundBox.maxX - 0.55);
+        this.currentPosition.y = THREE.MathUtils.clamp(this.currentPosition.y, boundBox.minY + 0.72, boundBox.maxY - 0.34);
+        this.currentPosition.z = THREE.MathUtils.clamp(this.currentPosition.z, boundBox.minZ + 0.42, boundBox.maxZ - 0.42);
       }
 
       this.group.position.copy(this.currentPosition);
       this.group.rotation.set(this.rollAngle, this.headingAngle, this.pitchAngle, 'YZX');
     }
 
-    // 2. Gill Breathing & Mirror Flare Animation
+    // 2. Drive imported GLB skeletal animation ("Take 01") + traveling biological S-wave spine propulsion
     const targetFlare = this.isFlaring ? 1.0 : 0.0;
     this.flareIntensity = THREE.MathUtils.damp(this.flareIntensity, targetFlare, 6.0, delta);
 
-    const breathe = Math.sin(this.animTime * 2.2) * 0.035;
-    const opOpen = 0.04 + breathe + this.flareIntensity * (this.combatPreview ? 0.32 : 0.48);
-    this.leftOperculum.rotation.y = Math.PI * 0.18 - opOpen;
-    this.rightOperculum.rotation.y = -Math.PI * 0.18 + opOpen;
+    if (this.glbReady && this.glbMixer) {
+      const glbTimeScale = this.combatMode
+        ? this.combatPreview
+          ? 0.9
+          : this.hitFlashTimer > 0 || this.combatSpin > 0.1
+          ? 1.8
+          : 1.35
+        : this.isFlaring
+        ? 1.25
+        : this.isExcited
+        ? 1.15
+        : this.isHovering
+        ? 0.65
+        : 0.95;
+      this.glbMixer.update(delta * glbTimeScale);
 
-    // Throat flare beard unfolds dramatically during flare
-    const beardScale = 0.08 + this.flareIntensity * (this.combatPreview ? 0.72 : 1.15);
-    this.leftBranchioBeard.scale.set(beardScale, beardScale, beardScale);
-    this.rightBranchioBeard.scale.set(beardScale, beardScale, beardScale);
+      // Lock root helper translation/rotation so only fins/gills animate without root drift
+      if (this.glbCubeNode) {
+        this.glbCubeNode.position.copy(this.glbCubeRestPos);
+        this.glbCubeNode.quaternion.copy(this.glbCubeRestQuat);
+      }
 
-    // Jaw breathing + gulp / food anticipation
-    if (this.mouthGulpTimer > 0) this.mouthGulpTimer = Math.max(0, this.mouthGulpTimer - delta);
-    const gulpAngle = this.mouthGulpTimer > 0 ? Math.sin((this.mouthGulpTimer / 0.42) * Math.PI) * 0.46 : 0;
-    const anticipateOpen = this.mouthAnticipate * 0.18;
-    this.lowerJawMesh.rotation.z = 0.34 - Math.max(0, breathe * 1.2) - gulpAngle - anticipateOpen;
+      const swimRatio = THREE.MathUtils.clamp(this.currentSwimSpeed / 0.85, 0, 1.45);
+      const swimFreq = this.combatMode
+        ? this.combatPreview
+          ? 6.0
+          : 9.5
+        : this.isFlaring
+        ? 8.0
+        : this.isExcited
+        ? 7.2
+        : THREE.MathUtils.lerp(4.0, 7.4, Math.min(1, swimRatio));
+      this.glbSwimPhase += delta * swimFreq;
 
-    // 3. Seamless S-Wave Spinal Deformation on Body + Synchronized Tail Root Offset!
-    const peduncleOffset = this.deformBodySpine(motionFactor);
+      const waveScale = this.combatMode
+        ? this.combatPreview
+          ? 0.85
+          : 1.3
+        : this.isFlaring
+        ? 1.22
+        : this.isExcited
+        ? 1.15
+        : THREE.MathUtils.lerp(0.68, 1.25, Math.min(1, swimRatio));
 
-    // 4. Pectoral Hummingbird Flutter (stabilizing faster when hovering/turning)
-    const flutterFreq = this.animTime * (this.isHovering ? 10.8 : 9.2);
-    const flutterAmp = (this.isHovering ? 0.46 : 0.38) + this.flareIntensity * 0.25;
-    this.leftPectoralFin.rotation.y = 0.48 + Math.sin(flutterFreq) * flutterAmp;
-    this.rightPectoralFin.rotation.y = -0.48 - Math.sin(flutterFreq + 0.35) * flutterAmp;
+      const turnBend = this.combatMode ? 0 : this.smoothedTurnDelta * 0.62;
+      for (let i = 0; i < this.glbSpineBones.length; i++) {
+        const b = this.glbSpineBones[i];
+        const wave = Math.sin(this.glbSwimPhase - b.phaseLag) * b.ampFactor * waveScale;
+        _waveQuat.setFromAxisAngle(_axisZ, wave + turnBend * b.turnWeight);
+        if (b.useLiveQuat) {
+          b.node.quaternion.multiply(_waveQuat);
+        } else {
+          b.node.quaternion.copy(b.restQuat).multiply(_waveQuat);
+        }
+      }
 
-    // 5. Flowing Fins Synchronized with Body Wave
-    this.animateCaudalFin(peduncleOffset, motionFactor);
-    this.animateSails(motionFactor);
-    this.animatePelvicRibbons();
+      // Expressive pectoral fin rowing (visible sculling/paddling motion when hovering & swimming)
+      const pecFreq = this.combatMode
+        ? this.combatPreview
+          ? 10.0
+          : 15.0
+        : this.isFlaring
+        ? 14.0
+        : this.isHovering
+        ? 12.2
+        : 10.6;
+      this.glbPecPhase += delta * pecFreq;
 
-    // 6. Subtle Eye Saccades (alert curious gaze)
-    const eyeSaccade = Math.sin(this.animTime * 1.2) * 0.14;
-    if (this.leftPupilGroup && this.rightPupilGroup) {
-      this.leftPupilGroup.rotation.y = eyeSaccade;
-      this.rightPupilGroup.rotation.y = -eyeSaccade;
+      const pecAmp = this.combatMode
+        ? this.combatPreview
+          ? 0.45
+          : 0.62
+        : this.isFlaring
+        ? 0.64
+        : this.isHovering
+        ? 0.54
+        : 0.44;
+
+      if (this.glbLeftPectoral) {
+        const pecL = Math.sin(this.glbPecPhase) * pecAmp;
+        const pecCupL = Math.cos(this.glbPecPhase) * (pecAmp * 0.38);
+        this.glbLeftPectoral.quaternion
+          .multiply(_waveQuat.setFromAxisAngle(_axisZ, pecL))
+          .multiply(_extraQuat.setFromAxisAngle(_axisX, pecCupL));
+      }
+      if (this.glbRightPectoral) {
+        const pecR = Math.sin(this.glbPecPhase + 0.38) * pecAmp;
+        const pecCupR = Math.cos(this.glbPecPhase + 0.38) * (pecAmp * 0.38);
+        this.glbRightPectoral.quaternion
+          .multiply(_waveQuat.setFromAxisAngle(_axisZ, -pecR))
+          .multiply(_extraQuat.setFromAxisAngle(_axisX, -pecCupR));
+      }
+
+      // Flowing pelvic (ventral) ribbon sweep
+      for (let i = 0; i < this.glbPelvicBones.length; i++) {
+        const p = this.glbPelvicBones[i];
+        const pSweep = Math.sin(this.glbSwimPhase * 0.85 - p.phaseLag) * p.ampX * waveScale;
+        const pSpread = Math.cos(this.glbSwimPhase * 0.85 - p.phaseLag) * p.ampZ * waveScale * p.side;
+        p.node.quaternion
+          .multiply(_waveQuat.setFromAxisAngle(_axisX, pSweep))
+          .multiply(_extraQuat.setFromAxisAngle(_axisZ, pSpread));
+      }
+    } else {
+      const breathe = Math.sin(this.animTime * 2.2) * 0.035;
+      const opOpen = 0.04 + breathe + this.flareIntensity * (this.combatPreview ? 0.32 : 0.48);
+      this.leftOperculum.rotation.y = Math.PI * 0.18 - opOpen;
+      this.rightOperculum.rotation.y = -Math.PI * 0.18 + opOpen;
+
+      const beardScale = 0.08 + this.flareIntensity * (this.combatPreview ? 0.72 : 1.15);
+      this.leftBranchioBeard.scale.set(beardScale, beardScale, beardScale);
+      this.rightBranchioBeard.scale.set(beardScale, beardScale, beardScale);
+
+      if (this.mouthGulpTimer > 0) this.mouthGulpTimer = Math.max(0, this.mouthGulpTimer - delta);
+      const gulpAngle = this.mouthGulpTimer > 0 ? Math.sin((this.mouthGulpTimer / 0.42) * Math.PI) * 0.46 : 0;
+      const anticipateOpen = this.mouthAnticipate * 0.18;
+      this.lowerJawMesh.rotation.z = 0.34 - Math.max(0, breathe * 1.2) - gulpAngle - anticipateOpen;
+
+      const peduncleOffset = this.deformBodySpine(motionFactor);
+
+      const flutterFreq = this.animTime * (this.isHovering ? 10.8 : 9.2);
+      const flutterAmp = (this.isHovering ? 0.46 : 0.38) + this.flareIntensity * 0.25;
+      this.leftPectoralFin.rotation.y = 0.48 + Math.sin(flutterFreq) * flutterAmp;
+      this.rightPectoralFin.rotation.y = -0.48 - Math.sin(flutterFreq + 0.35) * flutterAmp;
+
+      this.animateCaudalFin(peduncleOffset, motionFactor);
+      this.animateSails(motionFactor);
+      this.animatePelvicRibbons();
+
+      const eyeSaccade = Math.sin(this.animTime * 1.2) * 0.14;
+      if (this.leftPupilGroup && this.rightPupilGroup) {
+        this.leftPupilGroup.rotation.y = eyeSaccade;
+        this.rightPupilGroup.rotation.y = -eyeSaccade;
+      }
     }
 
     // Gentle hover buoyancy
@@ -2006,6 +2388,7 @@ export class BettaFish {
     this.isFlaring = true;
     this.combatHomePos.copy(homePos);
     this.combatFacing = facing;
+    this.combatBaseFacing = facing;
     this.combatDashOffset.set(0, 0, 0);
     this.combatRecoil = 0;
     this.combatSpin = 0;
@@ -2016,9 +2399,18 @@ export class BettaFish {
     this.combatPreview = previewOnly;
   }
 
+  public setCombatHomeY(y: number) {
+    this.combatHomePos.y = y;
+  }
+
+  public setCombatOpponentRef(pos: THREE.Vector3 | null) {
+    this.combatTargetPos = pos;
+  }
+
   public exitCombat(aquariumReturnPos: THREE.Vector3) {
     this.combatMode = false;
     this.combatPreview = false;
+    this.combatTargetPos = null;
     this.combatWindupActive = false;
     this.combatSpin = 0;
     this.combatRecoil = 0;
@@ -2028,6 +2420,9 @@ export class BettaFish {
     this.bodyMaterial.emissive.setRGB(0, 0, 0);
     this.caudalMaterial.emissive.setRGB(0, 0, 0);
     this.sailMaterial.emissive.setRGB(0, 0, 0);
+    for (const entry of this.glbMaterials) {
+      entry.mat.emissive.setRGB(0, 0, 0);
+    }
     this.isFlaring = false;
     this.combatGuardActive = false;
     this.mouthAnticipate = 0;
@@ -2045,8 +2440,8 @@ export class BettaFish {
     this.combatWindupActive = active;
     if (active) {
       this.combatDashOffset.x = -dirX * 0.48;
-      this.combatDashOffset.y = 0.09;
-      this.combatDashOffset.z = 0.08;
+      this.combatDashOffset.y = 0.08;
+      this.combatDashOffset.z = 0;
     }
   }
 
@@ -2060,9 +2455,22 @@ export class BettaFish {
         : power === 'parry'
         ? 1.88
         : 1.38;
-    this.combatDashOffset.x = dirX * reach;
-    this.combatDashOffset.y = power === 'heavy' || power === 'ultimate' ? 0.18 : 0.06;
-    this.combatDashOffset.z = power === 'light' ? 0.12 : 0;
+
+    let dx = dirX;
+    let dz = 0;
+    if (this.combatTargetPos) {
+      const rx = this.combatTargetPos.x - this.combatHomePos.x;
+      const rz = this.combatTargetPos.z - this.combatHomePos.z;
+      const len = Math.hypot(rx, rz);
+      if (len > 0.1) {
+        dx = rx / len;
+        dz = rz / len;
+      }
+    }
+
+    this.combatDashOffset.x = dx * reach;
+    this.combatDashOffset.z = dz * reach;
+    this.combatDashOffset.y = power === 'heavy' || power === 'ultimate' ? 0.16 : 0.06;
     this.triggerGulp();
     if (power === 'ultimate') {
       this.combatSpin = Math.PI * 4;
@@ -2076,8 +2484,8 @@ export class BettaFish {
     this.combatRecoil = isCrit ? 1.45 : 1.0;
     this.hitFlashTimer = isCrit ? 0.34 : 0.24;
     this.combatDashOffset.x = pushDirX * (isCrit ? 0.85 : 0.58);
-    this.combatDashOffset.y = isCrit ? 0.28 : 0.18;
-    this.combatDashOffset.z = (Math.random() - 0.5) * 0.18;
+    this.combatDashOffset.y = isCrit ? 0.22 : 0.14;
+    this.combatDashOffset.z = (Math.random() - 0.5) * (isCrit ? 0.55 : 0.32);
   }
 
   public setCombatGuard(active: boolean) {
@@ -2085,6 +2493,19 @@ export class BettaFish {
   }
 
   public dispose() {
+    this.isDisposed = true;
+    if (this.glbMixer) {
+      this.glbMixer.stopAllAction();
+      this.glbMixer = null;
+    }
+    this.glbRoot.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        const mesh = obj as THREE.Mesh;
+        mesh.geometry?.dispose();
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((m) => m?.dispose());
+      }
+    });
     this.bodyGeom.dispose();
     this.caudalFinGeom.dispose();
     this.dorsalFinGeom.dispose();

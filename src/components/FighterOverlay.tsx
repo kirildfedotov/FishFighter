@@ -32,7 +32,6 @@ export interface RivalProfile {
   maxHp: number;
   attackPower: number;
   rewardCoins: number;
-  rewardPearls: number;
   baseRating: number;
   baseWins: number;
   baseLosses: number;
@@ -49,8 +48,7 @@ export const RIVAL_ROSTER: RivalProfile[] = [
     skin: 'ruby_dragon',
     maxHp: 110,
     attackPower: 14,
-    rewardCoins: 80,
-    rewardPearls: 3,
+    rewardCoins: 100,
     baseRating: 1020,
     baseWins: 6,
     baseLosses: 4,
@@ -65,8 +63,7 @@ export const RIVAL_ROSTER: RivalProfile[] = [
     skin: 'black_samurai',
     maxHp: 135,
     attackPower: 17,
-    rewardCoins: 120,
-    rewardPearls: 5,
+    rewardCoins: 160,
     baseRating: 1140,
     baseWins: 11,
     baseLosses: 4,
@@ -81,8 +78,7 @@ export const RIVAL_ROSTER: RivalProfile[] = [
     skin: 'sakura_blossom',
     maxHp: 150,
     attackPower: 19,
-    rewardCoins: 160,
-    rewardPearls: 7,
+    rewardCoins: 220,
     baseRating: 1280,
     baseWins: 17,
     baseLosses: 3,
@@ -98,8 +94,7 @@ export const RIVAL_ROSTER: RivalProfile[] = [
     isVip: true,
     maxHp: 185,
     attackPower: 22,
-    rewardCoins: 240,
-    rewardPearls: 12,
+    rewardCoins: 350,
     baseRating: 1440,
     baseWins: 24,
     baseLosses: 2,
@@ -139,7 +134,6 @@ interface FighterOverlayProps {
   onMatchEnd: (
     won: boolean,
     coins: number,
-    pearls: number,
     exp: number,
     rivalId: string,
     ratingDelta: number
@@ -348,7 +342,6 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
         onMatchEndRef.current(
           true,
           rival.rewardCoins * mult,
-          rival.rewardPearls * mult,
           45,
           rival.id,
           rival.ratingGain
@@ -356,10 +349,10 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
       } else {
         retroAudio.playBlip(190, 0.25);
         setLastRatingDelta(-12);
-        onMatchEndRef.current(false, 15, 0, 12, rival.id, -12);
+        onMatchEndRef.current(false, 15, 12, rival.id, -12);
       }
     },
-    [rival.id, rival.ratingGain, rival.rewardCoins, rival.rewardPearls, stats.isVip]
+    [rival.id, rival.ratingGain, rival.rewardCoins, stats.isVip]
   );
 
   // Rival AI loop — ONLY runs during active fighting phase
@@ -619,7 +612,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                 retroAudio.playBlip(440, 0.05);
                 onExit();
               }}
-              className="ui-btn bg-slate-800/90 hover:bg-slate-700 border-white/15 text-slate-100 px-3 py-1.5 text-xs"
+              className="ui-btn glass-btn px-3 py-1.5 text-xs"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>В аквариум</span>
@@ -630,12 +623,12 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
               <span className="font-display font-bold text-sm sm:text-base text-white tracking-wide">
                 АРЕНА FISHFIGHTER
               </span>
-              <span className="hidden sm:inline-block text-xs text-slate-400 font-mono">
+              <span className="hidden sm:inline-block text-xs text-slate-300/80 font-mono">
                 · Место #{playerRank} ({playerRating})
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-white/10">
+            <div className="flex items-center gap-1.5 bg-white/[0.06] backdrop-blur-md p-1 rounded-xl border border-white/15">
               <button
                 type="button"
                 onClick={() => {
@@ -644,8 +637,8 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                 }}
                 className={`ui-btn px-2.5 py-1 text-xs rounded-lg ${
                   lobbyTab === 'opponents'
-                    ? 'bg-rose-600 border-rose-400/50 text-white'
-                    : 'bg-transparent border-transparent text-slate-300 hover:text-white'
+                    ? 'glass-btn-rose'
+                    : 'bg-transparent border-transparent shadow-none text-slate-300 hover:text-white hover:bg-white/[0.08]'
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
@@ -659,8 +652,8 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                 }}
                 className={`ui-btn px-2.5 py-1 text-xs rounded-lg ${
                   lobbyTab === 'standings'
-                    ? 'bg-amber-600 border-amber-300/50 text-white'
-                    : 'bg-transparent border-transparent text-slate-300 hover:text-white'
+                    ? 'glass-btn-amber'
+                    : 'bg-transparent border-transparent shadow-none text-slate-300 hover:text-white hover:bg-white/[0.08]'
                 }`}
               >
                 <BarChart3 className="w-3.5 h-3.5" />
@@ -696,10 +689,10 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                           retroAudio.playBlip(620, 0.05);
                           onSelectRival(idx);
                         }}
-                        className={`text-left p-2.5 sm:p-3 rounded-xl border transition-all cursor-pointer shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70 ${
+                        className={`text-left p-2.5 sm:p-3 rounded-xl border backdrop-blur-md transition-all cursor-pointer shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70 ${
                           isSelected
-                            ? 'bg-gradient-to-b from-rose-950/90 to-slate-950/95 border-rose-400/80 shadow-[0_0_24px_rgba(244,63,94,0.28),inset_0_1px_0_rgba(253,164,175,0.25)]'
-                            : 'bg-slate-900/85 border-white/10 hover:border-white/25 hover:bg-slate-800/85'
+                            ? 'bg-gradient-to-b from-rose-500/28 to-slate-900/55 border-rose-300/75 shadow-[0_0_24px_rgba(244,63,94,0.28),inset_0_1px_0_rgba(253,164,175,0.35)]'
+                            : 'bg-white/[0.06] border-white/15 hover:border-white/30 hover:bg-white/[0.12]'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-1.5 mb-1">
@@ -832,8 +825,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                 <span>
                   <span className="text-rose-300 font-bold">{rival.name}</span>{' '}
                   <span className="text-slate-400">
-                    (HP {rival.maxHp} · Награда {rival.rewardCoins * (stats.isVip ? 2 : 1)} 🪙 +{' '}
-                    {rival.rewardPearls * (stats.isVip ? 2 : 1)} 🦪)
+                    (HP {rival.maxHp} · Награда {rival.rewardCoins * (stats.isVip ? 2 : 1)} 🪙)
                   </span>
                 </span>
               </div>
@@ -845,7 +837,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                     retroAudio.playBlip(440, 0.05);
                     onExit();
                   }}
-                  className="ui-btn py-2.5 px-4 bg-slate-800/95 hover:bg-slate-700 border-white/15 text-slate-100 text-xs sm:text-sm"
+                  className="ui-btn glass-btn py-2.5 px-4 text-xs sm:text-sm"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>Вернуться</span>
@@ -854,7 +846,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                 <button
                   type="button"
                   onClick={startFight}
-                  className="ui-btn py-2.5 px-5 bg-gradient-to-r from-rose-600 via-red-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 border-amber-200/50 text-white text-xs sm:text-sm font-bold shadow-[0_0_24px_rgba(244,63,94,0.4)]"
+                  className="ui-btn glass-btn-rose py-2.5 px-5 text-xs sm:text-sm font-bold"
                 >
                   <Play className="w-4 h-4 fill-current" />
                   <span>Начать бой</span>
@@ -878,7 +870,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
             <button
               type="button"
               onClick={backToLobby}
-              className="ui-btn bg-slate-800/90 hover:bg-slate-700 border-white/15 text-slate-100 px-3 py-1.5 text-xs"
+              className="ui-btn glass-btn px-3 py-1.5 text-xs"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>К выбору бойца</span>
@@ -895,7 +887,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                 retroAudio.playBlip(440, 0.05);
                 onExit();
               }}
-              className="ui-btn bg-slate-800/90 hover:bg-slate-700 border-white/15 text-slate-200 px-3 py-1.5 text-xs"
+              className="ui-btn glass-btn px-3 py-1.5 text-xs"
             >
               <span>В аквариум</span>
             </button>
@@ -1037,9 +1029,6 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                 <span className="text-amber-300 font-bold">
                   +{rival.rewardCoins * (stats.isVip ? 2 : 1)} 🪙
                 </span>
-                <span className="text-fuchsia-300 font-bold">
-                  +{rival.rewardPearls * (stats.isVip ? 2 : 1)} 🦪
-                </span>
                 <span className="text-cyan-300 font-bold">+45 EXP</span>
                 <span className="text-emerald-300 font-bold">+{lastRatingDelta} рейтинг</span>
               </>
@@ -1056,7 +1045,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
             <button
               type="button"
               onClick={startFight}
-              className="ui-btn py-2.5 px-3 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs"
+              className="ui-btn glass-btn py-2.5 px-3 text-xs"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Реванш</span>
@@ -1068,7 +1057,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                 setLobbyTab('standings');
                 backToLobby();
               }}
-              className="ui-btn py-2.5 px-3 bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 border-amber-300/40 text-white text-xs"
+              className="ui-btn glass-btn-amber py-2.5 px-3 text-xs"
             >
               <BarChart3 className="w-3.5 h-3.5" />
               <span>Таблица / Бойцы</span>
@@ -1078,7 +1067,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
           <button
             type="button"
             onClick={onExit}
-            className="ui-btn w-full py-2.5 px-3 bg-slate-900/90 hover:bg-slate-800 border-white/15 text-slate-200 text-xs"
+            className="ui-btn glass-btn w-full py-2.5 px-3 text-xs"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Вернуться в аквариум</span>
@@ -1093,36 +1082,36 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
             type="button"
             disabled={matchResult !== 'none' || actionLock}
             onClick={() => handlePlayerAttack('light')}
-            className="ui-btn relative flex-col py-2.5 px-3 bg-slate-900/90 hover:bg-slate-800 border-cyan-500/40 text-white"
+            className="ui-btn glass-btn-cyan relative flex-col py-2.5 px-3"
           >
-            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/90 border border-white/15 font-mono text-[10px] text-slate-400 leading-none">
+            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-white/10 border border-white/20 font-mono text-[10px] text-cyan-100/80 leading-none">
               Q
             </span>
-            <div className="flex items-center gap-1.5 text-cyan-300 text-xs sm:text-sm font-bold">
+            <div className="flex items-center gap-1.5 text-cyan-200 text-xs sm:text-sm font-bold">
               <Zap className="w-4 h-4" />
               <span>Выпад</span>
             </div>
-            <span className="text-[11px] font-normal text-slate-400">+Комбо · +22% ярости</span>
+            <span className="text-[11px] font-normal text-cyan-100/75">+Комбо · +22% ярости</span>
           </button>
 
           <button
             type="button"
             disabled={matchResult !== 'none' || actionLock || heavyCd > 0}
             onClick={() => handlePlayerAttack('heavy')}
-            className={`ui-btn relative flex-col py-2.5 px-3 text-white ${
+            className={`ui-btn relative flex-col py-2.5 px-3 ${
               comboCount >= 2 && heavyCd <= 0
-                ? 'bg-gradient-to-b from-orange-950/95 to-slate-900 border-amber-400/75 shadow-[0_0_18px_rgba(245,158,11,0.3)]'
-                : 'bg-slate-900/90 hover:bg-slate-800 border-orange-500/45'
+                ? 'glass-btn-amber shadow-[0_0_22px_rgba(245,158,11,0.34)]'
+                : 'glass-btn hover:border-orange-300/60'
             }`}
           >
-            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/90 border border-white/15 font-mono text-[10px] text-slate-400 leading-none">
+            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-white/10 border border-white/20 font-mono text-[10px] text-slate-200/85 leading-none">
               W
             </span>
             <div className="flex items-center gap-1.5 text-orange-300 text-xs sm:text-sm font-bold">
               <Swords className="w-4 h-4" />
               <span>Таран</span>
             </div>
-            <span className="text-[11px] font-mono font-normal text-slate-400 tabular-nums">
+            <span className="text-[11px] font-mono font-normal text-slate-200/75 tabular-nums">
               {heavyCd > 0
                 ? `${heavyCd}с`
                 : comboCount > 0
@@ -1135,20 +1124,20 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
             type="button"
             disabled={matchResult !== 'none' || guardCd > 0 || isGuarding}
             onClick={handleGuard}
-            className={`ui-btn relative flex-col py-2.5 px-3 border ${
+            className={`ui-btn relative flex-col py-2.5 px-3 ${
               isGuarding
-                ? 'bg-cyan-500/25 border-cyan-300 text-white shadow-[0_0_20px_rgba(34,211,238,0.35)]'
+                ? 'glass-btn-cyan shadow-[0_0_24px_rgba(34,211,238,0.4)]'
                 : rivalCharging && guardCd <= 0
-                ? 'bg-gradient-to-b from-amber-500/25 via-sky-500/20 to-slate-900 border-amber-300 text-white shadow-[0_0_24px_rgba(251,191,36,0.45)]'
-                : 'bg-slate-900/90 hover:bg-slate-800 border-sky-400/45 text-white'
+                ? 'glass-btn-amber shadow-[0_0_24px_rgba(251,191,36,0.45)]'
+                : 'glass-btn-sky'
             }`}
           >
-            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/90 border border-white/15 font-mono text-[10px] text-slate-400 leading-none">
+            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-white/10 border border-white/20 font-mono text-[10px] text-sky-100/85 leading-none">
               Space
             </span>
             <div
               className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold ${
-                rivalCharging && guardCd <= 0 && !isGuarding ? 'text-amber-300' : 'text-sky-300'
+                rivalCharging && guardCd <= 0 && !isGuarding ? 'text-amber-200' : 'text-sky-200'
               }`}
             >
               <Shield className="w-4 h-4" />
@@ -1160,7 +1149,7 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
                   : 'Щит / Блок'}
               </span>
             </div>
-            <span className="text-[11px] font-mono font-normal text-slate-400 tabular-nums">
+            <span className="text-[11px] font-mono font-normal text-sky-100/75 tabular-nums">
               {guardCd > 0 ? `${guardCd}с` : 'Контратака'}
             </span>
           </button>
@@ -1169,13 +1158,13 @@ export const FighterOverlay: React.FC<FighterOverlayProps> = ({
             type="button"
             disabled={matchResult !== 'none' || actionLock || playerRage < 100}
             onClick={() => handlePlayerAttack('ultimate')}
-            className={`ui-btn relative flex-col py-2.5 px-3 border ${
+            className={`ui-btn relative flex-col py-2.5 px-3 ${
               playerRage >= 100
-                ? 'bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 border-amber-200/60 text-white shadow-[0_0_24px_rgba(244,63,94,0.45)]'
-                : 'bg-slate-900/75 border-white/10 text-slate-400'
+                ? 'glass-btn-rose'
+                : 'glass-btn text-slate-300'
             }`}
           >
-            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/90 border border-white/15 font-mono text-[10px] text-slate-400 leading-none">
+            <span className="hidden sm:inline-flex absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-white/10 border border-white/20 font-mono text-[10px] text-slate-200/85 leading-none">
               R
             </span>
             <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold">

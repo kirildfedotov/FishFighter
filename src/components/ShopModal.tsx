@@ -12,10 +12,11 @@ import { retroAudio } from '../services/retroAudio';
 
 interface ShopModalProps {
   stats: FishStats;
+  initialTab?: 'skins' | 'themes' | 'donate';
   onClose: () => void;
-  onBuySkin: (skinId: FishColorPalette, priceCoins: number, pricePearls: number) => void;
+  onBuySkin: (skinId: FishColorPalette, priceCoins: number) => void;
   onEquipSkin: (skinId: FishColorPalette) => void;
-  onBuyTheme: (themeId: AquariumThemeId, priceCoins: number, pricePearls: number) => void;
+  onBuyTheme: (themeId: AquariumThemeId, priceCoins: number) => void;
   onEquipTheme: (themeId: AquariumThemeId) => void;
   onApplyDonation: (tier: DonationTier) => void;
 }
@@ -30,6 +31,7 @@ const THEME_BADGE_ICON: Record<AquariumThemeId, string> = {
 
 export const ShopModal: React.FC<ShopModalProps> = ({
   stats,
+  initialTab = 'skins',
   onClose,
   onBuySkin,
   onEquipSkin,
@@ -37,7 +39,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
   onEquipTheme,
   onApplyDonation,
 }) => {
-  const [activeTab, setActiveTab] = useState<'skins' | 'themes' | 'donate'>('skins');
+  const [activeTab, setActiveTab] = useState<'skins' | 'themes' | 'donate'>(initialTab);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [customAmount, setCustomAmount] = useState<string>('300');
 
@@ -64,15 +66,13 @@ export const ShopModal: React.FC<ShopModalProps> = ({
     onApplyDonation(tier);
   };
 
-  const formatPriceLabel = (priceCoins: number, pricePearls: number): string => {
-    if (priceCoins > 0 && pricePearls > 0) return `${priceCoins} 🪙 + ${pricePearls} 🦪`;
+  const formatPriceLabel = (priceCoins: number): string => {
     if (priceCoins > 0) return `${priceCoins} 🪙`;
-    if (pricePearls > 0) return `${pricePearls} 🦪`;
     return 'Бесплатно';
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/55 backdrop-blur-sm select-none">
       <div className="glass-panel w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Clean Modern Header */}
         <div className="px-4 py-3.5 sm:px-6 sm:py-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/10">
@@ -91,10 +91,8 @@ export const ShopModal: React.FC<ShopModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5 ml-auto">
-            <div className="flex items-center gap-3 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-mono font-bold">
-              <span className="text-amber-300 tabular-nums">🪙 {stats.coins}</span>
-              <span className="text-white/15">|</span>
-              <span className="text-fuchsia-300 tabular-nums">🦪 {stats.pearls}</span>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400/10 backdrop-blur-md border border-amber-300/30 text-xs font-mono font-bold">
+              <span className="text-amber-200 tabular-nums">🪙 {stats.coins}</span>
             </div>
 
             <button
@@ -104,26 +102,26 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                 retroAudio.playBlip(400, 0.04);
               }}
               aria-label="Закрыть магазин"
-              className="ui-btn bg-slate-800/80 hover:bg-slate-700 border-white/15 text-slate-200 p-2 rounded-xl"
+              className="ui-btn glass-btn p-2 rounded-xl"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Modern Segmented 3-Tab Switcher */}
+        {/* Modern Glass Segmented 3-Tab Switcher */}
         <div className="px-4 pt-3 sm:px-6">
-          <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-900/90 border border-white/10 rounded-xl">
+          <div className="grid grid-cols-3 gap-1.5 p-1 bg-white/[0.05] backdrop-blur-md border border-white/15 rounded-xl">
             <button
               type="button"
               onClick={() => {
                 setActiveTab('skins');
                 retroAudio.playBlip(550, 0.03);
               }}
-              className={`py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              className={`ui-btn py-2 px-2.5 rounded-lg text-xs sm:text-sm border ${
                 activeTab === 'skins'
-                  ? 'bg-white text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'glass-btn border-white/35 text-white'
+                  : 'bg-transparent border-transparent shadow-none text-slate-300 hover:text-white hover:bg-white/[0.06]'
               }`}
             >
               <span>Окрасы</span>
@@ -136,10 +134,10 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                 setActiveTab('themes');
                 retroAudio.playBlip(550, 0.03);
               }}
-              className={`py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              className={`ui-btn py-2 px-2.5 rounded-lg text-xs sm:text-sm border ${
                 activeTab === 'themes'
-                  ? 'bg-white text-slate-950 shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'glass-btn border-white/35 text-white'
+                  : 'bg-transparent border-transparent shadow-none text-slate-300 hover:text-white hover:bg-white/[0.06]'
               }`}
             >
               <span>Аквариумы</span>
@@ -152,10 +150,10 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                 setActiveTab('donate');
                 retroAudio.playBlip(640, 0.04);
               }}
-              className={`py-2 px-2.5 rounded-lg text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              className={`ui-btn py-2 px-2.5 rounded-lg text-xs sm:text-sm border ${
                 activeTab === 'donate'
-                  ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 shadow-sm font-bold'
-                  : 'text-amber-300 hover:text-amber-200'
+                  ? 'glass-btn-amber font-bold'
+                  : 'bg-transparent border-transparent shadow-none text-amber-300 hover:text-amber-200 hover:bg-amber-400/10'
               }`}
             >
               <Crown className="w-3.5 h-3.5 shrink-0" />
@@ -171,16 +169,16 @@ export const ShopModal: React.FC<ShopModalProps> = ({
               {skinsList.map((skin) => {
                 const isUnlocked = stats.unlockedSkins.includes(skin.id);
                 const isEquipped = stats.skin === skin.id;
-                const canBuy = stats.coins >= skin.priceCoins && stats.pearls >= skin.pricePearls;
+                const canBuy = stats.coins >= skin.priceCoins;
                 const gradId = `shop_skin_${skin.id}`;
 
                 return (
                   <div
                     key={skin.id}
-                    className={`rounded-2xl border flex flex-col justify-between overflow-hidden transition shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${
+                    className={`rounded-2xl border backdrop-blur-md flex flex-col justify-between overflow-hidden transition shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] ${
                       isEquipped
-                        ? 'bg-slate-900/95 border-cyan-400/65 shadow-[0_0_28px_rgba(34,211,238,0.16),inset_0_1px_0_rgba(165,243,252,0.2)]'
-                        : 'bg-slate-900/70 border-white/10 hover:border-white/25'
+                        ? 'bg-cyan-500/10 border-cyan-300/65 shadow-[0_0_28px_rgba(34,211,238,0.18),inset_0_1px_0_rgba(165,243,252,0.28)]'
+                        : 'bg-white/[0.05] border-white/15 hover:border-white/30 hover:bg-white/[0.08]'
                     }`}
                   >
                     {/* Live Palette Betta Preview */}
@@ -251,7 +249,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                           <button
                             type="button"
                             disabled
-                            className="ui-btn w-full py-2.5 px-4 bg-cyan-500/15 border-cyan-400/40 text-cyan-200 text-xs"
+                            className="ui-btn glass-btn-cyan w-full py-2.5 px-4 text-xs"
                           >
                             <Check className="w-4 h-4" />
                             <span>Сейчас выбран</span>
@@ -263,7 +261,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                               onEquipSkin(skin.id);
                               retroAudio.playBlip(750, 0.05);
                             }}
-                            className="ui-btn w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs"
+                            className="ui-btn glass-btn w-full py-2.5 px-4 text-xs"
                           >
                             Выбрать окрас
                           </button>
@@ -273,16 +271,16 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                           type="button"
                           disabled={!canBuy}
                           onClick={() => {
-                            onBuySkin(skin.id, skin.priceCoins, skin.pricePearls);
+                            onBuySkin(skin.id, skin.priceCoins);
                             retroAudio.playCoin();
                           }}
                           className={`ui-btn w-full py-2.5 px-4 text-xs ${
                             canBuy
-                              ? 'bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 border-amber-200/50 text-slate-950 font-bold'
-                              : 'bg-slate-800/70 border-white/10 text-slate-400'
+                              ? 'glass-btn-amber font-bold'
+                              : 'glass-btn text-slate-400'
                           }`}
                         >
-                          {`Купить · ${formatPriceLabel(skin.priceCoins, skin.pricePearls)}`}
+                          {`Купить · ${formatPriceLabel(skin.priceCoins)}`}
                         </button>
                       )}
                     </div>
@@ -297,16 +295,16 @@ export const ShopModal: React.FC<ShopModalProps> = ({
               {themesList.map((thm) => {
                 const isUnlocked = stats.unlockedThemes.includes(thm.id);
                 const isEquipped = stats.theme === thm.id;
-                const canBuy = stats.coins >= thm.priceCoins && stats.pearls >= thm.pricePearls;
+                const canBuy = stats.coins >= thm.priceCoins;
                 const icon = THEME_BADGE_ICON[thm.id] || '🌊';
 
                 return (
                   <div
                     key={thm.id}
-                    className={`rounded-2xl border flex flex-col justify-between overflow-hidden transition shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${
+                    className={`rounded-2xl border backdrop-blur-md flex flex-col justify-between overflow-hidden transition shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] ${
                       isEquipped
-                        ? 'bg-slate-900/95 border-cyan-400/65 shadow-[0_0_28px_rgba(34,211,238,0.16),inset_0_1px_0_rgba(165,243,252,0.2)]'
-                        : 'bg-slate-900/70 border-white/10 hover:border-white/25'
+                        ? 'bg-cyan-500/10 border-cyan-300/65 shadow-[0_0_28px_rgba(34,211,238,0.18),inset_0_1px_0_rgba(165,243,252,0.28)]'
+                        : 'bg-white/[0.05] border-white/15 hover:border-white/30 hover:bg-white/[0.08]'
                     }`}
                   >
                     {/* Aquarium Panorama Preview */}
@@ -352,7 +350,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                           <button
                             type="button"
                             disabled
-                            className="ui-btn w-full py-2.5 px-4 bg-cyan-500/15 border-cyan-400/40 text-cyan-200 text-xs"
+                            className="ui-btn glass-btn-cyan w-full py-2.5 px-4 text-xs"
                           >
                             <Check className="w-4 h-4" />
                             <span>Сейчас установлена</span>
@@ -364,7 +362,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                               onEquipTheme(thm.id);
                               retroAudio.playBlip(750, 0.05);
                             }}
-                            className="ui-btn w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs"
+                            className="ui-btn glass-btn w-full py-2.5 px-4 text-xs"
                           >
                             Установить тему
                           </button>
@@ -374,16 +372,16 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                           type="button"
                           disabled={!canBuy}
                           onClick={() => {
-                            onBuyTheme(thm.id, thm.priceCoins, thm.pricePearls);
+                            onBuyTheme(thm.id, thm.priceCoins);
                             retroAudio.playCoin();
                           }}
                           className={`ui-btn w-full py-2.5 px-4 text-xs ${
                             canBuy
-                              ? 'bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 border-amber-200/50 text-slate-950 font-bold'
-                              : 'bg-slate-800/70 border-white/10 text-slate-400'
+                              ? 'glass-btn-amber font-bold'
+                              : 'glass-btn text-slate-400'
                           }`}
                         >
-                          {`Купить · ${formatPriceLabel(thm.priceCoins, thm.pricePearls)}`}
+                          {`Купить · ${formatPriceLabel(thm.priceCoins)}`}
                         </button>
                       )}
                     </div>
@@ -400,10 +398,10 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                 {DONATION_TIERS.map((tier) => (
                   <div
                     key={tier.id}
-                    className={`p-4 rounded-2xl border flex flex-col justify-between transition shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${
+                    className={`p-4 rounded-2xl border backdrop-blur-md flex flex-col justify-between transition shadow-[inset_0_1px_0_rgba(255,255,255,0.14)] ${
                       tier.isPopular
-                        ? 'bg-gradient-to-b from-amber-950/35 via-slate-900/95 to-slate-950 border-amber-400/65 shadow-[0_0_28px_rgba(251,191,36,0.16)]'
-                        : 'bg-slate-900/70 border-white/10 hover:border-white/25'
+                        ? 'bg-gradient-to-b from-amber-500/18 via-slate-900/45 to-slate-950/60 border-amber-300/65 shadow-[0_0_28px_rgba(251,191,36,0.18)]'
+                        : 'bg-white/[0.05] border-white/15 hover:border-white/30 hover:bg-white/[0.08]'
                     }`}
                   >
                     <div>
@@ -442,7 +440,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                     <button
                       type="button"
                       onClick={() => triggerDonation(tier)}
-                      className="ui-btn w-full py-2.5 px-4 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 border-amber-200/50 text-slate-950 font-bold text-xs"
+                      className="ui-btn glass-btn-amber w-full py-2.5 px-4 font-bold text-xs"
                     >
                       <CreditCard className="w-3.5 h-3.5" />
                       <span>Поддержать · {tier.priceRub} ₽</span>
@@ -458,7 +456,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="p-3 bg-slate-900/75 border border-white/10 rounded-xl flex items-center justify-between gap-2.5">
+                  <div className="p-3 bg-white/[0.05] backdrop-blur-md border border-white/15 rounded-xl flex items-center justify-between gap-2.5">
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-white">Карта / СБП (РФ)</div>
                       <div className="text-xs font-mono text-amber-300 mt-0.5 truncate">
@@ -468,7 +466,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                     <button
                       type="button"
                       onClick={() => copyToClipboard('+79990000000', 'sbp')}
-                      className="ui-btn px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs shrink-0"
+                      className="ui-btn glass-btn px-2.5 py-1.5 text-xs shrink-0"
                     >
                       {copiedKey === 'sbp' ? (
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -479,7 +477,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                     </button>
                   </div>
 
-                  <div className="p-3 bg-slate-900/75 border border-white/10 rounded-xl flex items-center justify-between gap-2.5">
+                  <div className="p-3 bg-white/[0.05] backdrop-blur-md border border-white/15 rounded-xl flex items-center justify-between gap-2.5">
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-white">USDT (TRC-20) / TON</div>
                       <div className="text-xs font-mono text-emerald-300 mt-0.5 truncate">
@@ -489,7 +487,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                     <button
                       type="button"
                       onClick={() => copyToClipboard('TYh6zK2b7bV4m9KqP1sD7uVw8zY3rX8nLq', 'crypto')}
-                      className="ui-btn px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border-white/15 text-white text-xs shrink-0"
+                      className="ui-btn glass-btn px-2.5 py-1.5 text-xs shrink-0"
                     >
                       {copiedKey === 'crypto' ? (
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -501,9 +499,9 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-900/65 border border-white/10 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="p-3 bg-white/[0.05] backdrop-blur-md border border-white/15 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="text-xs text-slate-300">
-                    Произвольная сумма поддержки (начисляются монеты и жемчуг):
+                    Произвольная сумма поддержки (начисляются монеты):
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <input
@@ -511,7 +509,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                       min={10}
                       value={customAmount}
                       onChange={(e) => setCustomAmount(e.target.value)}
-                      className="w-24 bg-slate-950 border border-white/15 rounded-xl px-2.5 py-1.5 text-xs font-mono tabular-nums text-amber-300 text-center outline-none focus:border-cyan-400"
+                      className="w-24 bg-slate-950/75 border border-white/15 rounded-xl px-2.5 py-1.5 text-xs font-mono tabular-nums text-amber-300 text-center outline-none focus:border-cyan-400"
                       placeholder="300"
                     />
                     <span className="text-xs font-mono text-slate-400">₽</span>
@@ -525,14 +523,13 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                           jpName: 'カスタム寄付',
                           priceRub: amount,
                           priceUsd: Number((amount / 80).toFixed(2)),
-                          pearlsAwarded: Math.round(amount * 0.7),
-                          coinsAwarded: amount * 12,
+                          coinsAwarded: amount * 20,
                           titleBadge: 'Спонсор',
                           description: `Поддержка проекта на ${amount} ₽`,
-                          benefits: [`+${Math.round(amount * 0.7)} жемчужин`, `+${amount * 12} монет`],
+                          benefits: [`+${amount * 20} монет`],
                         });
                       }}
-                      className="ui-btn px-3.5 py-2 bg-amber-400 hover:bg-amber-300 border-amber-200/40 text-slate-950 font-bold text-xs whitespace-nowrap"
+                      className="ui-btn glass-btn-amber px-3.5 py-2 font-bold text-xs whitespace-nowrap"
                     >
                       Поддержать
                     </button>
